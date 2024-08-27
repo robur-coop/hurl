@@ -1,0 +1,16 @@
+(executable
+ (name hurl)
+ (package hurl)
+ (public_name hurl)
+ (libraries
+  logs.cli
+  fmt.cli
+  fmt.tty
+  mirage-crypto-rng-miou-unix
+  hxd.core
+  multipart_form
+  cmdliner
+  httpcats
+  jsonm))
+
+(ocamllex str)
