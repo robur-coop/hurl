@@ -75,7 +75,9 @@ let colorscheme =
   Hxd.colorscheme_of_array x
 
 let setup_logs utf_8 style_renderer level =
-  let stdout = Format.make_formatter (output_substring stdout) (fun () -> flush stdout) in
+  let stdout =
+    Format.make_formatter (output_substring stdout) (fun () -> flush stdout)
+  in
   Fmt_tty.setup_std_outputs ~utf_8 ?style_renderer ();
   let style_renderer =
     match style_renderer with
@@ -95,7 +97,8 @@ let setup_logs utf_8 style_renderer level =
   in
   Hxd.Fmt.set_style_renderer stdout style_renderer;
   let reporter = reporter Fmt.stderr in
-  Logs.set_reporter reporter; Logs.set_level level;
+  Logs.set_reporter reporter;
+  Logs.set_level level;
   (Option.is_none level, stdout)
 
 let setup_logs = Term.(const setup_logs $ utf_8 $ renderer $ verbosity)
@@ -106,10 +109,12 @@ let hex =
 
 let output =
   let doc = "The destination to save the response content." in
-  let parser str = match Fpath.of_string str with
+  let parser str =
+    match Fpath.of_string str with
     | Ok v when Sys.file_exists str -> error_msgf "%a already exist" Fpath.pp v
     | Ok _ as v -> v
-    | Error _ as err -> err in
+    | Error _ as err -> err
+  in
   let output = Arg.conv (parser, Fpath.pp) in
   Arg.(value & opt (some output) None & info [ "o"; "output" ] ~doc)
 
@@ -215,14 +220,19 @@ let tls_version =
     & info [ "tls-version" ] ~doc ~docv:"<tls-version>")
 
 let http_version =
-  let doc = "Enforce a specific HTTP version (HTTP/1.1 or H2) for the given request." in
-  let parser str = match String.lowercase_ascii str with
+  let doc =
+    "Enforce a specific HTTP version (HTTP/1.1 or H2) for the given request."
+  in
+  let parser str =
+    match String.lowercase_ascii str with
     | "http/1.1" | "h1" -> Ok `HTTP_1_1
     | "h2" -> Ok `H2
-    | _ -> error_msgf "Invalid HTTP version: %S" str in
+    | _ -> error_msgf "Invalid HTTP version: %S" str
+  in
   let pp ppf = function
     | `HTTP_1_1 -> Fmt.string ppf "http/1.1"
-    | `H2 -> Fmt.string ppf "h2" in
+    | `H2 -> Fmt.string ppf "h2"
+  in
   let http_version = Arg.conv (parser, pp) in
   Arg.(value & opt (some http_version) None & info [ "http-version" ] ~doc)
 
@@ -249,22 +259,196 @@ let setup_tls authenticator version http_version =
                   msg);
             fun ?ip:_ ~host:_ _ -> Ok None)
   in
-  let alpn_protocols = match http_version with
+  let alpn_protocols =
+    match http_version with
     | Some `HTTP_1_1 -> [ "http/1.1" ]
     | Some `H2 -> [ "h2" ]
-    | None -> [ "h2"; "http/1.1" ] in
+    | None -> [ "h2"; "http/1.1" ]
+  in
   match Tls.Config.client ~authenticator ~alpn_protocols ?version () with
-  | Ok tls_config -> Some tls_config, http_version
+  | Ok tls_config -> (Some tls_config, http_version)
   | Error (`Msg msg) ->
       Logs.warn (fun m -> m "Impossible to build a TLS configuration: %s" msg);
-      None, http_version
+      (None, http_version)
 
-let setup_tls = Term.(const setup_tls $ authenticator $ tls_version $ http_version)
+let setup_tls =
+  Term.(const setup_tls $ authenticator $ tls_version $ http_version)
+
+let docs = "Domain-name resolution."
+
+let timeout =
+  let is_digit = function '0' .. '9' -> true | _ -> false in
+  let parser str =
+    let len =
+      let len = ref 0 in
+      while !len < String.length str && is_digit str.[!len] do
+        incr len
+      done;
+      !len
+    in
+    let meter = String.sub str len (String.length str - len) in
+    let value = String.sub str 0 len in
+    match meter with
+    | "ns" -> Ok (Int64.of_string value)
+    | "us" -> Ok (Duration.of_us (int_of_string value))
+    | "ms" -> Ok (Duration.of_ms (int_of_string value))
+    | "sec" | "s" -> Ok (Duration.of_sec (int_of_string value))
+    | "min" | "m" -> Ok (Duration.of_min (int_of_string value))
+    | "hour" | "h" -> Ok (Duration.of_hour (int_of_string value))
+    | _ -> error_msgf "Invalid time: %S" str
+  in
+  Arg.conv (parser, Duration.pp)
+
+let aaaa_timeout =
+  let doc = "The timeout applied to the IPv6 resolution." in
+  Arg.(value & opt (some timeout) None & info [ "aaaa-timeout" ] ~doc ~docs)
+
+let connect_delay =
+  let doc =
+    "Time to repeat another connection attempt if the others don't respond."
+  in
+  Arg.(value & opt (some timeout) None & info [ "connect-delay" ] ~doc ~docs)
+
+let connect_timeout =
+  let doc = "The timeout applied to $(b,connect())." in
+  Arg.(value & opt (some timeout) None & info [ "connect-timeout" ] ~doc ~docs)
+
+let resolve_timeout =
+  let doc = "The timeout applied to the domain-name resolution." in
+  Arg.(value & opt (some timeout) None & info [ "resolve-timeout" ] ~doc ~docs)
+
+let resolve_retries =
+  let doc = "The number of attempts to make a connection." in
+  Arg.(value & opt (some int) None & info [ "resolve-retries" ] ~doc ~docs)
+
+type happy_eyeballs = {
+    aaaa_timeout: int64 option
+  ; connect_delay: int64 option
+  ; connect_timeout: int64 option
+  ; resolve_timeout: int64 option
+  ; resolve_retries: int option
+}
+
+let setup_happy_eyeballs aaaa_timeout connect_delay connect_timeout
+    resolve_timeout resolve_retries = function
+  | false ->
+      Some
+        {
+          aaaa_timeout
+        ; connect_delay
+        ; connect_timeout
+        ; resolve_timeout
+        ; resolve_retries
+        }
+  | _ -> None
+
+let without_happy_eyeballs =
+  let doc = "Don't use the happy-eyeballs algorithm (RFC8305)." in
+  Arg.(value & flag & info [ "without-happy-eyeballs" ] ~doc)
+
+let setup_happy_eyeballs =
+  Term.(
+    const setup_happy_eyeballs
+    $ aaaa_timeout
+    $ connect_delay
+    $ connect_timeout
+    $ resolve_timeout
+    $ resolve_retries
+    $ without_happy_eyeballs)
+
+let nameserver_of_string str =
+  let ( let* ) = Result.bind in
+  match String.split_on_char ':' str with
+  | "tls" :: rest -> (
+      let str = String.concat ":" rest in
+      match String.split_on_char '!' str with
+      | [ nameserver ] ->
+          let* ipaddr, port =
+            Ipaddr.with_port_of_string ~default:853 nameserver
+          in
+          let* authenticator = Ca_certs.authenticator () in
+          let* tls = Tls.Config.client ~authenticator () in
+          Ok (`Tcp, `Tls (tls, ipaddr, port))
+      | nameserver :: authenticator ->
+          let* ipaddr, port =
+            Ipaddr.with_port_of_string ~default:853 nameserver
+          in
+          let authenticator = String.concat "!" authenticator in
+          let* authenticator = X509.Authenticator.of_string authenticator in
+          let time () = Some (Ptime.v (Ptime_clock.now_d_ps ())) in
+          let authenticator = authenticator time in
+          let* tls = Tls.Config.client ~authenticator () in
+          Ok (`Tcp, `Tls (tls, ipaddr, port))
+      | [] -> assert false)
+  | "tcp" :: nameserver ->
+      let str = String.concat ":" nameserver in
+      let* ipaddr, port = Ipaddr.with_port_of_string ~default:53 str in
+      Ok (`Tcp, `Plaintext (ipaddr, port))
+  | "udp" :: nameserver | nameserver ->
+      let str = String.concat ":" nameserver in
+      let* ipaddr, port = Ipaddr.with_port_of_string ~default:53 str in
+      Ok (`Udp, `Plaintext (ipaddr, port))
+
+type nameserver =
+  [ `Plaintext of Ipaddr.t * int | `Tls of Tls.Config.client * Ipaddr.t * int ]
+
+let nameserver =
+  let parser = nameserver_of_string in
+  let pp ppf = function
+    | _, `Tls (_, ipaddr, 853) ->
+        Fmt.pf ppf "tls:%a!<authenticator>" Ipaddr.pp ipaddr
+    | _, `Tls (_, ipaddr, port) ->
+        Fmt.pf ppf "tls:%a:%d!<authenticator>" Ipaddr.pp ipaddr port
+    | `Tcp, `Plaintext (ipaddr, 53) -> Fmt.pf ppf "tcp:%a" Ipaddr.pp ipaddr
+    | `Udp, `Plaintext (ipaddr, 53) -> Fmt.pf ppf "%a" Ipaddr.pp ipaddr
+    | `Tcp, `Plaintext (ipaddr, port) ->
+        Fmt.pf ppf "tcp:%a:%d" Ipaddr.pp ipaddr port
+    | `Udp, `Plaintext (ipaddr, port) ->
+        Fmt.pf ppf "%a:%d" Ipaddr.pp ipaddr port
+  in
+  Arg.conv (parser, pp) ~docv:"<nameserver>"
+
+let nameservers =
+  let doc = "The nameserver used to resolve domain-names." in
+  let google_com = (`Udp, `Plaintext (Ipaddr.of_string_exn "8.8.8.8", 53)) in
+  Arg.(
+    value & opt_all nameserver [ google_com ] & info [ "n"; "nameserver" ] ~doc)
+
+let setup_nameservers nameservers =
+  let tcp, udp =
+    List.partition_map
+      begin
+        function `Udp, v -> Either.Right v | `Tcp, v -> Either.Left v
+      end
+      nameservers
+  in
+  match (tcp, udp) with
+  | [], nameservers -> `Ok (`Udp, nameservers)
+  | nameservers, [] -> `Ok (`Tcp, nameservers)
+  | _ -> `Error (true, "Impossible to use TCP & UDP protocols for nameservers")
+
+let setup_nameservers = Term.(ret (const setup_nameservers $ nameservers))
+
+let dns =
+  let system =
+    Arg.info [ "system" ]
+      ~doc:
+        "Domain name resolution is done by the system (usually 127.0.0.1:53)."
+  in
+  let ocaml =
+    Arg.info [ "internal" ]
+      ~doc:
+        "Domain name resolution is handled by our OCaml implementation (see \
+         $(b,ocaml-dns))."
+  in
+  Arg.(value & vflag `System [ (`System, system); (`OCaml, ocaml) ])
 
 let follow_redirect =
-  let doc = "If the server reports that the requested page has moved to a different location \
-            (indicated with $(b,Location:) header and a $(b,3XX) response code), this option \
-            makes $(tname) redo the request on the new place." in
+  let doc =
+    "If the server reports that the requested page has moved to a different \
+     location (indicated with $(b,Location:) header and a $(b,3XX) response \
+     code), this option makes $(tname) redo the request on the new place."
+  in
   Arg.(value & flag & info [ "L"; "location"; "follow-redirect" ] ~doc)
 
 let meth =
