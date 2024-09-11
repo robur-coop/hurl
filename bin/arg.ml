@@ -2,18 +2,22 @@ let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 
 open Cmdliner
 
+let docs_output = "OUTPUT"
+let docs_tls = "Transport Layer Security"
+
 let verbosity =
   let env = Cmd.Env.info "HURL_LOGS" in
-  Logs_cli.level ~env ()
+  Logs_cli.level ~env ~docs:docs_output ()
 
 let renderer =
   let env = Cmd.Env.info "HURL_FMT" in
-  Fmt_cli.style_renderer ~env ()
+  Fmt_cli.style_renderer ~env ~docs:docs_output ()
 
 let utf_8 =
   let doc = "Allow us to emit UTF-8 characters." in
   let env = Cmd.Env.info "HURL_UTF_8" in
-  Arg.(value & opt bool true & info [ "with-utf-8" ] ~doc ~env)
+  let open Arg in
+  value & opt bool true & info [ "with-utf-8" ] ~doc ~docs:docs_output ~env
 
 let app_style = `Cyan
 let err_style = `Red
@@ -41,14 +45,11 @@ let pp_header =
   pp_header ~pp_h
 
 let reporter ppf =
-  let pid = Unix.getpid () in
   let report src level ~over k msgf =
     let k _ = over (); k () in
     let with_metadata header _tags k ppf fmt =
       Fmt.kpf k ppf
-        ("[%a:%04d]%a[%a]: @[<hov>" ^^ fmt ^^ "@]\n%!")
-        Fmt.(styled `Cyan (fmt "%6d"))
-        pid
+        ("[%02d]%a[%a]: @[<hov>" ^^ fmt ^^ "@]\n%!")
         (Stdlib.Domain.self () :> int)
         pp_header (level, header)
         Fmt.(styled `Magenta (fmt "%20s"))
@@ -102,10 +103,12 @@ let setup_logs utf_8 style_renderer level =
   (Option.is_none level, stdout)
 
 let setup_logs = Term.(const setup_logs $ utf_8 $ renderer $ verbosity)
+let () = Logs_threaded.enable ()
 
 let hex =
   let doc = "Displays the response content in hexadecimal format." in
-  Arg.(value & flag & info [ "h"; "hex" ] ~doc)
+  let open Arg in
+  value & flag & info [ "h"; "hex" ] ~doc ~docs:docs_output
 
 let output =
   let doc = "The destination to save the response content." in
@@ -115,8 +118,9 @@ let output =
     | Ok _ as v -> v
     | Error _ as err -> err
   in
+  let open Arg in
   let output = Arg.conv (parser, Fpath.pp) in
-  Arg.(value & opt (some output) None & info [ "o"; "output" ] ~doc)
+  value & opt (some output) None & info [ "o"; "output" ] ~doc ~docs:docs_output
 
 let cols =
   let doc = "Format <cols> octets per line. Default 16. Max 256." in
@@ -127,24 +131,33 @@ let cols =
     | n -> Ok n
     | exception _ -> error_msgf "Invalid <cols> value: %S" str
   in
-  let cols = Arg.conv (parser, Fmt.int) in
-  Arg.(value & opt (some cols) None & info [ "c"; "cols" ] ~doc ~docv:"<cols>")
+  let open Arg in
+  let cols = conv (parser, Fmt.int) in
+  value
+  & opt (some cols) None
+  & info [ "c"; "cols" ] ~doc ~docv:"<cols>" ~docs:docs_output
 
 let groupsize =
   let doc =
     "Separate the output of every <bytes> bytes (two hex characters) by a \
      whitespace. Specify -g 0 to supress grouping. <bytes> defaults to 2."
   in
-  Arg.(
-    value & opt (some int) None & info [ "g"; "groupsize" ] ~doc ~docv:"<bytes>")
+  let open Arg in
+  value
+  & opt (some int) None
+  & info [ "g"; "groupsize" ] ~doc ~docv:"<bytes>" ~docs:docs_output
 
 let len =
   let doc = "Stop after writing <len> octets." in
-  Arg.(value & opt (some int) None & info [ "l"; "len" ] ~doc ~docv:"<len>")
+  let open Arg in
+  value
+  & opt (some int) None
+  & info [ "l"; "len" ] ~doc ~docv:"<len>" ~docs:docs_output
 
 let uppercase =
   let doc = "Use upper case hex letters. Default is lower case." in
-  Arg.(value & flag & info [ "u" ] ~doc)
+  let open Arg in
+  value & flag & info [ "u" ] ~doc ~docs:docs_output
 
 let setup_hxd cols groupsize len uppercase =
   Hxd.xxd ?cols ?groupsize ?long:len ~uppercase colorscheme
@@ -160,10 +173,10 @@ let authenticator =
   in
   let pp ppf (_, str) = Fmt.string ppf str in
   let authenticator = Arg.conv (parser, pp) in
-  Arg.(
-    value
-    & opt (some authenticator) None
-    & info [ "a"; "auth"; "authenticator" ] ~doc)
+  let open Arg in
+  value
+  & opt (some authenticator) None
+  & info [ "a"; "auth"; "authenticator" ] ~doc ~docs:docs_tls
 
 let tls_version =
   let ( let* ) = Result.bind in
@@ -213,11 +226,11 @@ let tls_version =
     | `Only version -> pp_version ppf version
     | `Range (min, max) -> Fmt.pf ppf "%a,%a" pp_version min pp_version max
   in
+  let open Arg in
   let tls_version = Arg.conv (parser, pp) in
-  Arg.(
-    value
-    & opt (some tls_version) None
-    & info [ "tls-version" ] ~doc ~docv:"<tls-version>")
+  value
+  & opt (some tls_version) None
+  & info [ "tls-version" ] ~doc ~docv:"<tls-version>" ~docs:docs_tls
 
 let http_version =
   let doc =
@@ -233,8 +246,11 @@ let http_version =
     | `HTTP_1_1 -> Fmt.string ppf "http/1.1"
     | `H2 -> Fmt.string ppf "h2"
   in
-  let http_version = Arg.conv (parser, pp) in
-  Arg.(value & opt (some http_version) None & info [ "http-version" ] ~doc)
+  let open Arg in
+  let http_version = conv (parser, pp) in
+  value
+  & opt (some http_version) None
+  & info [ "http-version" ] ~doc ~docs:docs_tls
 
 let now () = Some (Ptime_clock.now ())
 
@@ -274,7 +290,7 @@ let setup_tls authenticator version http_version =
 let setup_tls =
   Term.(const setup_tls $ authenticator $ tls_version $ http_version)
 
-let docs = "Domain-name resolution."
+let docs_dns = "Domain Name Service"
 
 let timeout =
   let is_digit = function '0' .. '9' -> true | _ -> false in
@@ -301,25 +317,34 @@ let timeout =
 
 let aaaa_timeout =
   let doc = "The timeout applied to the IPv6 resolution." in
-  Arg.(value & opt (some timeout) None & info [ "aaaa-timeout" ] ~doc ~docs)
+  let open Arg in
+  value & opt (some timeout) None & info [ "aaaa-timeout" ] ~doc ~docs:docs_dns
 
 let connect_delay =
   let doc =
     "Time to repeat another connection attempt if the others don't respond."
   in
-  Arg.(value & opt (some timeout) None & info [ "connect-delay" ] ~doc ~docs)
+  let open Arg in
+  value & opt (some timeout) None & info [ "connect-delay" ] ~doc ~docs:docs_dns
 
 let connect_timeout =
   let doc = "The timeout applied to $(b,connect())." in
-  Arg.(value & opt (some timeout) None & info [ "connect-timeout" ] ~doc ~docs)
+  let open Arg in
+  value
+  & opt (some timeout) None
+  & info [ "connect-timeout" ] ~doc ~docs:docs_dns
 
 let resolve_timeout =
   let doc = "The timeout applied to the domain-name resolution." in
-  Arg.(value & opt (some timeout) None & info [ "resolve-timeout" ] ~doc ~docs)
+  let open Arg in
+  value
+  & opt (some timeout) None
+  & info [ "resolve-timeout" ] ~doc ~docs:docs_dns
 
 let resolve_retries =
   let doc = "The number of attempts to make a connection." in
-  Arg.(value & opt (some int) None & info [ "resolve-retries" ] ~doc ~docs)
+  let open Arg in
+  value & opt (some int) None & info [ "resolve-retries" ] ~doc ~docs:docs_dns
 
 type happy_eyeballs = {
     aaaa_timeout: int64 option
@@ -344,7 +369,8 @@ let setup_happy_eyeballs aaaa_timeout connect_delay connect_timeout
 
 let without_happy_eyeballs =
   let doc = "Don't use the happy-eyeballs algorithm (RFC8305)." in
-  Arg.(value & flag & info [ "without-happy-eyeballs" ] ~doc)
+  let open Arg in
+  value & flag & info [ "without-happy-eyeballs" ] ~doc ~docs:docs_dns
 
 let setup_happy_eyeballs =
   Term.(
@@ -411,8 +437,10 @@ let nameserver =
 let nameservers =
   let doc = "The nameserver used to resolve domain-names." in
   let google_com = (`Udp, `Plaintext (Ipaddr.of_string_exn "8.8.8.8", 53)) in
-  Arg.(
-    value & opt_all nameserver [ google_com ] & info [ "n"; "nameserver" ] ~doc)
+  let open Arg in
+  value
+  & opt_all nameserver [ google_com ]
+  & info [ "n"; "nameserver" ] ~doc ~docs:docs_dns
 
 let setup_nameservers nameservers =
   let tcp, udp =
@@ -434,12 +462,14 @@ let dns =
     Arg.info [ "system" ]
       ~doc:
         "Domain name resolution is done by the system (usually 127.0.0.1:53)."
+      ~docs:docs_dns
   in
   let ocaml =
     Arg.info [ "internal" ]
       ~doc:
         "Domain name resolution is handled by our OCaml implementation (see \
          $(b,ocaml-dns))."
+      ~docs:docs_dns
   in
   Arg.(value & vflag `System [ (`System, system); (`OCaml, ocaml) ])
 
@@ -484,10 +514,29 @@ let meth =
     & opt (some meth) None
     & info [ "m"; "meth"; "method" ] ~doc ~docv:"METHOD")
 
+let possibly_malformed_path =
+  "the url path contains characters that have just been escaped. If you are \
+   trying to specify parameters in the url, you should do so via an item \
+   request (rather than directly in the url)."
+
 let uri =
+  let pp_port ppf = function
+    | Some port -> Fmt.pf ppf ":%d" port
+    | None -> () in
+  let pp_user_pass ppf = function
+    | Some (user, Some pass) -> Fmt.pf ppf "%s:%s@" user pass
+    | Some (user, None) -> Fmt.pf ppf "%s@" user
+    | None -> () in
   let doc = "The request URL." in
   let parser str =
-    match Httpcats.decode_uri str with Ok _ -> Ok str | Error _ as err -> err
+    match Httpcats.decode_uri str with
+    | Ok (_tls, scheme, user_pass, host, port, path) ->
+        let path' = Pct.path path in
+        if path <> path'
+        then Logs.warn (fun m -> m "%s" possibly_malformed_path);
+        let uri = Fmt.str "%s://%a%s%a%s" scheme pp_user_pass user_pass host pp_port port path' in
+        Ok uri
+    | Error _ as err -> err
   in
   let uri = Arg.conv (parser, Fmt.string) in
   Arg.(required & pos 0 (some uri) None & info [] ~doc ~docv:"URL")
@@ -628,3 +677,47 @@ let request_items =
   let doc = "Optional key-value pairs to be included in the request." in
   let request_item = Arg.conv (parser_request_item, pp_request_item) in
   Arg.(value & pos_right 0 request_item [] & info [] ~doc ~docv:"REQUEST_ITEM")
+
+let fields_filter =
+  let is_valid = function
+    | 'a' .. 'z'
+    | 'A' .. 'Z'
+    | '0' .. '9'
+    | '!' | '"' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ','
+    | '-' | '.' | '/' | ';' | '<' | '=' | '>' | '?' | '@' | '[' | '\\' | ']'
+    | '^' | '_' | '`' | '{' | '|' | '}' | '~' ->
+        true
+    | _ -> false
+  in
+  let parser str =
+    if str = "" then error_msgf "Empty field filter"
+    else
+      match str.[0] with
+      | '-' when String.(for_all is_valid (sub str 1 (length str - 1))) ->
+          Ok (`Exclude, String.sub str 1 (String.length str - 1))
+      | '+' when String.(for_all is_valid (sub str 1 (length str - 1))) ->
+          Ok (`Include, String.sub str 1 (String.length str - 1))
+      | _ when String.for_all is_valid str -> Ok (`Include, str)
+      | _ -> error_msgf "Invalid field filter: %S" str
+  in
+  let pp ppf = function
+    | `Exclude, str -> Fmt.pf ppf "-%s" str
+    | `Include, str -> Fmt.pf ppf "+%s" str
+  in
+  let filter = Arg.conv (parser, pp) in
+  let doc = "Filtering displayed field" in
+  Arg.(value & opt_all filter [] & info [ "field-filter" ] ~doc)
+
+let setup_fields_filter fields =
+  let incl, excl =
+    List.partition_map
+      (function
+        | `Include, field -> Either.Left field
+        | `Exclude, field -> Either.Right field)
+      fields
+  in
+  let module Set = Set.Make (String) in
+  let incl = Set.of_list incl and excl = Set.of_list excl in
+  Set.(to_list (diff excl incl))
+
+let setup_fields_filter = Term.(const setup_fields_filter $ fields_filter)

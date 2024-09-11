@@ -18,6 +18,9 @@ val input_to_lexemes :
   -> input:(bytes -> int -> int -> int)
   -> Jsonm.lexeme Seq.t
 
+val seq_of_string_to_lexemes :
+  ?size_chunk:int -> string Seq.t -> Jsonm.lexeme Seq.t
+
 val location_to_lexemes : ?size_chunk:int -> Fpath.t -> Jsonm.lexeme Seq.t
 
 val lexemes_to_seq_of_bytes :

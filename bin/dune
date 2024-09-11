@@ -4,13 +4,17 @@
  (public_name hurl)
  (libraries
   logs.cli
+  logs.threaded
   fmt.cli
   fmt.tty
   mirage-crypto-rng-miou-unix
   hxd.core
+  hxd.string
   multipart_form
   cmdliner
   httpcats
+  decompress.de
+  decompress.gz
   jsonm))
 
 (ocamllex str)

@@ -22,21 +22,32 @@ let validate ?(size_chunk = 0x800) ~input k =
   let error (`Error err) =
     error_msgf "Invalid JSON input: %a" Jsonm.pp_error err
   in
-  let rec go = function
+  let rec go stack = function
     | #eoi -> k ()
     | #error as v -> error v
-    | `Lexeme _ -> go (Jsonm.decode decoder)
+    | `Lexeme `Os -> go (`Object :: stack) (Jsonm.decode decoder)
+    | `Lexeme `As -> go (`Array :: stack) (Jsonm.decode decoder)
+    | `Lexeme ((`Oe | `Ae) as lexeme) -> begin
+        match (stack, lexeme) with
+        | `Object :: stack, `Oe -> go stack (Jsonm.decode decoder)
+        | `Array :: stack, `Ae -> go stack (Jsonm.decode decoder)
+        | _ -> error_msgf "Malformed JSON input"
+      end
+    | `Lexeme _ -> go stack (Jsonm.decode decoder)
     | #await -> (
         try
           let len = input buf 0 (Bytes.length buf) in
-          if len = 0 then error_msgf "Partial JSON input"
+          if len = 0 then
+            match stack with
+            | [] -> k ()
+            | _ -> error_msgf "Unterminated JSON object"
           else begin
             Jsonm.Manual.src decoder buf 0 len;
-            go (Jsonm.decode decoder)
+            go stack (Jsonm.decode decoder)
           end
         with End_of_file -> error_msgf "Partial JSON input")
   in
-  go `Await
+  go [] `Await
 
 let decode ?(size_chunk = 0x800) ~input k =
   let decoder = Jsonm.decoder `Manual in
@@ -253,9 +264,32 @@ let location_to_lexemes ?size_chunk location =
   let finally () = close_in ic in
   input_to_lexemes ~size_chunk ~finally ~input:(input ic)
 
-let lexemes_to_seq_of_bytes ?(size_chunk = 0x800) ?minify
+let seq_of_string_to_lexemes ?size_chunk (seq : string Seq.t) =
+  let seq = ref seq in
+  let str = ref "" and len = ref 0 in
+  let input buf off len' =
+    if !len = 0 then
+      match Seq.uncons !seq with
+      | None -> 0
+      | Some (str', seq') ->
+          let () = seq := seq' in
+          let () = str := str' in
+          let () = len := String.length str' in
+          let max = min len' !len in
+          let () = Bytes.blit_string str' 0 buf off max in
+          let () = len := !len - max in
+          max
+    else
+      let max = min len' !len in
+      let () = Bytes.blit_string !str (String.length !str - !len) buf off max in
+      let () = len := !len - max in
+      max
+  in
+  input_to_lexemes ?size_chunk ?finally:None ~input
+
+let lexemes_to_seq_of_bytes ?(size_chunk = 0x800) ?(minify = false)
     (seq : Jsonm.lexeme Seq.t) =
-  let encoder = Jsonm.encoder ?minify `Manual in
+  let encoder = Jsonm.encoder ~minify `Manual in
   let buf = Bytes.create size_chunk in
   let rec partial seq = function
     | `Ok -> seq
@@ -267,3 +301,29 @@ let lexemes_to_seq_of_bytes ?(size_chunk = 0x800) ?minify
   and fn action = partial Seq.empty (Jsonm.encode encoder action) in
   Jsonm.Manual.dst encoder buf 0 (Bytes.length buf);
   Seq.flat_map fn Seq.(append (map (fun l -> `Lexeme l) seq) (return `End))
+
+(*
+module Prettier = struct
+  type t =
+    { decoder : Jsonm.decoder
+    ; stack : [ `Object | `Array ] list
+    ; stdout : Format.formatter }
+
+  let decode t str =
+    let rec until_await to_align stack decoder = match Jsonm.decode decoder, stack with
+      | `Await, _ -> { decoder; stack; stdout= t.stdout }
+      | `Lexeme `Os ->
+          Fmt.pf t.stdout "%a{@\n%!" (pp_align ~to_align) stack;
+          until_await true (succ stack) decoder
+      | `Lexeme `As ->
+          Fmt.pf t.stdout "%a[@\n%!" (pp_align ~to_align) stack;
+          until_await true (succ stack) decoder
+      | `Lexeme (`Name str) ->
+          Fmt.pf t.stdout "%a%S:@ " pp_align stack;
+          until_await false (succ stack) decoder
+      | `Lexeme (`Bool v) ->
+          Fmt.pf t.stdout "%a%b" (pp_align ~to_align) stack v;
+          until_await true (succ stack) decoder
+
+end
+*)
