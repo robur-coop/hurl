@@ -146,17 +146,28 @@ let ready_for_a_redirection ~uri resp =
 type printer = Printer : (string, 'v) Flow.t * ('v, unit) Sink.t -> printer
 
 module Out = struct
+  type show =
+    [ `DNS
+    | `IP
+    | `TLS
+    | `HTTP
+    | `Headers_request
+    | `Headers_response
+    | `Body_request
+    | `Body_response ]
+
   type cfg = {
       quiet: bool
     ; ppf: Format.formatter
     ; finally: unit -> unit
-    ; hex: bool
+    ; format: [ `Hex | `Json | `Raw | `None ]
     ; hxd: Hxd.cfg
     ; fields_filter: string list
     ; meta_and_resp: (Httpcats.meta * Httpcats.response) Miou.Computation.t
+    ; show: show list
   }
 
-  let setup_out (quiet, stdout) hxd hex fields_filter output =
+  let setup_out (quiet, stdout) hxd print format fields_filter output =
     let ppf, finally =
       match output with
       | Some location ->
@@ -166,7 +177,16 @@ module Out = struct
       | None -> (stdout, Fun.const ())
     in
     let meta_and_resp = Miou.Computation.create () in
-    { quiet; hxd; hex; ppf; finally; fields_filter; meta_and_resp }
+    {
+      quiet
+    ; hxd
+    ; format
+    ; ppf
+    ; finally
+    ; fields_filter
+    ; meta_and_resp
+    ; show= print
+    }
 
   let setup_out =
     let open Arg in
@@ -174,18 +194,46 @@ module Out = struct
       const setup_out
       $ setup_logs
       $ setup_hxd
-      $ hex
+      $ printers
+      $ format
       $ setup_fields_filter
       $ output)
+
+  let show_dns cfg (record, domain_name, set) =
+    if List.mem `DNS cfg.show && Ipaddr.Set.is_empty set = false then begin
+      Printers.print_dns_result (record, domain_name, set);
+      Fmt.pf cfg.ppf "\n%!"
+    end
+
+  let show_ip cfg conn =
+    if List.mem `IP cfg.show then begin
+      Printers.print_address conn;
+      Fmt.pf cfg.ppf "\n%!"
+    end
+
+  let show_tls cfg = function
+    | Some _ as tls when List.mem `TLS cfg.show ->
+        Printers.print_tls tls; Fmt.pf cfg.ppf "\n%!"
+    | _ -> ()
+
+  let show_http cfg resp =
+    if List.mem `HTTP cfg.show then begin
+      Printers.print_response resp;
+      Fmt.pf cfg.ppf "\n%!"
+    end
+
+  let show_headers_response cfg resp =
+    if List.mem `Headers_response cfg.show then begin
+      Printers.print_headers_response ~fields_filter:cfg.fields_filter resp;
+      Fmt.pf cfg.ppf "\n%!"
+    end
 end
 
 let guess_how_to_print cfg resp =
-  if cfg.Out.hex then `Hex
-  else
-    match recognize_mime_type resp with
-    | Some (`Text, _) -> `Text
-    | Some (`Application, `Iana_token "json") -> `Json
-    | _ -> `Hex
+  match (recognize_mime_type resp, cfg.Out.format) with
+  | Some (`Text, _), (`Raw | `None) -> `Text
+  | Some (`Application, `Iana_token "json"), (`Json | `None) -> `Json
+  | _ -> `Hex
 
 let compressed_content resp = content_encoding resp
 
@@ -218,12 +266,10 @@ let rec consumer cfg qqueue =
         | None, `Text -> Printer (Flow.identity, Sink.to_formatter cfg.ppf)
         | _ -> assert false
       in
-      Printers.print_address conn;
-      Fmt.pf cfg.ppf "\n%!";
-      Printers.print_tls tls;
-      if Option.is_some tls then Fmt.pf cfg.ppf "\n%!";
-      Printers.print_response ~fields_filter:cfg.fields_filter resp;
-      Fmt.pf cfg.ppf "\n%!";
+      Out.show_ip cfg conn;
+      Out.show_tls cfg tls;
+      Out.show_http cfg resp;
+      Out.show_headers_response cfg resp;
       let (), _source = Stream.run ~from ~via ~into in
       Fmt.pf cfg.ppf "\n%!"; consumer cfg qqueue
 
@@ -258,8 +304,6 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
         let value = ((meta, resp), queue) in
         Bqueue.close queue; Bqueue.put qqueue value; `New_response
   in
-  Printers.print_headers (Httpcats.Headers.of_list headers);
-  Fmt.pf out_cfg.Out.ppf "\n%!";
   Fun.protect ~finally:out_cfg.Out.finally @@ fun () ->
   let consumer = Miou.async @@ fun () -> consumer out_cfg qqueue in
   Httpcats.request ?config ?tls_config ~resolver ~follow_redirect ?meth ~headers
@@ -273,7 +317,7 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
       Logs.err (fun m -> m "Got an error: %a" Httpcats.pp_error err);
       Fmt.failwith "%a" Httpcats.pp_error err
 
-let system_getaddrinfo record domain_name =
+let system_getaddrinfo out_cfg record domain_name =
   let opt =
     match record with
     | `A -> [ Unix.AI_FAMILY Unix.PF_INET ]
@@ -292,24 +336,23 @@ let system_getaddrinfo record domain_name =
             | Unix.ADDR_UNIX _ -> set)
           Ipaddr.Set.empty addrs
       in
-      if Ipaddr.Set.is_empty set = false then
-        Printers.print_dns_result (record, domain_name, set);
+      Out.show_dns out_cfg (record, domain_name, set);
       if Ipaddr.Set.is_empty set then
         error_msgf "%a not found as an inet service" Domain_name.pp domain_name
       else Ok set
 
-let dns_getaddrinfo dns record domain_name =
+let dns_getaddrinfo out_cfg dns record domain_name =
   let ( let* ) = Result.bind in
   match record with
   | `A ->
       let* ipaddr = Dns_client_miou_unix.gethostbyname dns domain_name in
       let set = Ipaddr.(Set.singleton (V4 ipaddr)) in
-      Printers.print_dns_result (record, domain_name, set);
+      Out.show_dns out_cfg (record, domain_name, set);
       Ok set
   | `AAAA ->
       let* ipaddr = Dns_client_miou_unix.gethostbyname6 dns domain_name in
       let set = Ipaddr.(Set.singleton (V6 ipaddr)) in
-      Printers.print_dns_result (record, domain_name, set);
+      Out.show_dns out_cfg (record, domain_name, set);
       Ok set
 
 let now = Mtime_clock.elapsed_ns
@@ -336,7 +379,8 @@ let run out_cfg (tls_cfg, http_version) happy_eyeballs_cfg dns_cfg nameservers
         in
         let daemon, resolver =
           Happy_eyeballs_miou_unix.create ~happy_eyeballs
-            ~getaddrinfo:system_getaddrinfo ()
+            ~getaddrinfo:(system_getaddrinfo out_cfg)
+            ()
         in
         (Some daemon, `Happy resolver)
     | Some he, `OCaml ->
@@ -357,7 +401,7 @@ let run out_cfg (tls_cfg, http_version) happy_eyeballs_cfg dns_cfg nameservers
           Happy_eyeballs_miou_unix.create ~happy_eyeballs ?getaddrinfo:None ()
         in
         let dns = Dns_client_miou_unix.create ~nameservers resolver in
-        Happy_eyeballs_miou_unix.inject resolver (dns_getaddrinfo dns);
+        Happy_eyeballs_miou_unix.inject resolver (dns_getaddrinfo out_cfg dns);
         (Some daemon, `Happy resolver)
   in
   let rng = Mirage_crypto_rng_miou_unix.(initialize (module Pfortuna)) in

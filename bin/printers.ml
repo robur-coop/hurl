@@ -62,9 +62,11 @@ let print_field ppf (name, value) =
         name (String.concat " " x);
       List.iter (fun line -> Fmt.pf ppf "  %s\n%!" (String.concat " " line)) r
 
-let print_response ?(fields_filter = []) ppf resp =
+let print_response ppf resp =
   Fmt.pf ppf "%a %a %a\n%!" pp_version resp.Httpcats.version pp_status
-    resp.Httpcats.status pp_reason resp.Httpcats.status;
+    resp.Httpcats.status pp_reason resp.Httpcats.status
+
+let print_headers_response ?(fields_filter = []) ppf resp =
   List.iter
     (fun (field, value) ->
       if List.mem field fields_filter = false then print_field ppf (field, value))
@@ -108,9 +110,10 @@ let print_tls ppf { Tls.Core.protocol_version; ciphersuite; alpn_protocol; _ } =
     ciphersuite
 
 let print_address value = pr "%a" print_address value
+let print_response value = pr "%a" print_response value
 
-let print_response ?fields_filter value =
-  pr "%a" (print_response ?fields_filter) value
+let print_headers_response ?fields_filter value =
+  pr "%a" (print_headers_response ?fields_filter) value
 
 let print_dns_result value = pr "%a" print_dns_result value
 

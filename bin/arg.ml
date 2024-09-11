@@ -3,7 +3,8 @@ let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 open Cmdliner
 
 let docs_output = "OUTPUT"
-let docs_tls = "Transport Layer Security"
+let docs_tls = "TRANSPORT LAYER SECURITY"
+let docs_hexdump = "HEX OUTPUT"
 
 let verbosity =
   let env = Cmd.Env.info "HURL_LOGS" in
@@ -17,7 +18,9 @@ let utf_8 =
   let doc = "Allow us to emit UTF-8 characters." in
   let env = Cmd.Env.info "HURL_UTF_8" in
   let open Arg in
-  value & opt bool true & info [ "with-utf-8" ] ~doc ~docs:docs_output ~env
+  value
+  & opt bool true
+  & info [ "with-utf-8" ] ~doc ~docv:"BOOL" ~docs:docs_output ~env
 
 let app_style = `Cyan
 let err_style = `Red
@@ -105,11 +108,6 @@ let setup_logs utf_8 style_renderer level =
 let setup_logs = Term.(const setup_logs $ utf_8 $ renderer $ verbosity)
 let () = Logs_threaded.enable ()
 
-let hex =
-  let doc = "Displays the response content in hexadecimal format." in
-  let open Arg in
-  value & flag & info [ "h"; "hex" ] ~doc ~docs:docs_output
-
 let output =
   let doc = "The destination to save the response content." in
   let parser str =
@@ -120,44 +118,46 @@ let output =
   in
   let open Arg in
   let output = Arg.conv (parser, Fpath.pp) in
-  value & opt (some output) None & info [ "o"; "output" ] ~doc ~docs:docs_output
+  value
+  & opt (some output) None
+  & info [ "o"; "output" ] ~doc ~docv:"FILE" ~docs:docs_output
 
 let cols =
-  let doc = "Format <cols> octets per line. Default 16. Max 256." in
+  let doc = "Format $(i,COLS) octets per line. Default 16. Max 256." in
   let parser str =
     match int_of_string str with
     | n when n < 1 || n > 256 ->
-        error_msgf "Invalid <cols> value (must <= 256 && > 0): %d" n
+        error_msgf "Invalid COLS value (must <= 256 && > 0): %d" n
     | n -> Ok n
-    | exception _ -> error_msgf "Invalid <cols> value: %S" str
+    | exception _ -> error_msgf "Invalid COLS value: %S" str
   in
   let open Arg in
   let cols = conv (parser, Fmt.int) in
   value
   & opt (some cols) None
-  & info [ "c"; "cols" ] ~doc ~docv:"<cols>" ~docs:docs_output
+  & info [ "c"; "cols" ] ~doc ~docv:"COLS" ~docs:docs_hexdump
 
 let groupsize =
   let doc =
-    "Separate the output of every <bytes> bytes (two hex characters) by a \
-     whitespace. Specify -g 0 to supress grouping. <bytes> defaults to 2."
+    "Separate the output of every $(i,bytes) bytes (two hex characters) by a \
+     whitespace. Specify -g 0 to supress grouping. $(i,bytes) defaults to 2."
   in
   let open Arg in
   value
   & opt (some int) None
-  & info [ "g"; "groupsize" ] ~doc ~docv:"<bytes>" ~docs:docs_output
+  & info [ "g"; "groupsize" ] ~doc ~docv:"BYTES" ~docs:docs_hexdump
 
 let len =
-  let doc = "Stop after writing <len> octets." in
+  let doc = "Stop after writing $(i,LEN) octets." in
   let open Arg in
   value
   & opt (some int) None
-  & info [ "l"; "len" ] ~doc ~docv:"<len>" ~docs:docs_output
+  & info [ "l"; "len" ] ~doc ~docv:"LEN" ~docs:docs_hexdump
 
 let uppercase =
   let doc = "Use upper case hex letters. Default is lower case." in
   let open Arg in
-  value & flag & info [ "u" ] ~doc ~docs:docs_output
+  value & flag & info [ "u" ] ~doc ~docs:docs_hexdump
 
 let setup_hxd cols groupsize len uppercase =
   Hxd.xxd ?cols ?groupsize ?long:len ~uppercase colorscheme
@@ -176,7 +176,9 @@ let authenticator =
   let open Arg in
   value
   & opt (some authenticator) None
-  & info [ "a"; "auth"; "authenticator" ] ~doc ~docs:docs_tls
+  & info
+      [ "a"; "auth"; "authenticator" ]
+      ~doc ~docs:docs_tls ~docv:"AUTHENTICATOR"
 
 let tls_version =
   let ( let* ) = Result.bind in
@@ -230,7 +232,7 @@ let tls_version =
   let tls_version = Arg.conv (parser, pp) in
   value
   & opt (some tls_version) None
-  & info [ "tls-version" ] ~doc ~docv:"<tls-version>" ~docs:docs_tls
+  & info [ "tls-version" ] ~doc ~docv:"TLS-VERSION" ~docs:docs_tls
 
 let http_version =
   let doc =
@@ -250,7 +252,7 @@ let http_version =
   let http_version = conv (parser, pp) in
   value
   & opt (some http_version) None
-  & info [ "http-version" ] ~doc ~docs:docs_tls
+  & info [ "http-version" ] ~doc ~docv:"PROTOCOL" ~docs:docs_tls
 
 let now () = Some (Ptime_clock.now ())
 
@@ -290,7 +292,7 @@ let setup_tls authenticator version http_version =
 let setup_tls =
   Term.(const setup_tls $ authenticator $ tls_version $ http_version)
 
-let docs_dns = "Domain Name Service"
+let docs_dns = "DOMAIN NAME SERVICE"
 
 let timeout =
   let is_digit = function '0' .. '9' -> true | _ -> false in
@@ -313,38 +315,44 @@ let timeout =
     | "hour" | "h" -> Ok (Duration.of_hour (int_of_string value))
     | _ -> error_msgf "Invalid time: %S" str
   in
-  Arg.conv (parser, Duration.pp)
+  Arg.conv ~docv:"TIME" (parser, Duration.pp)
 
 let aaaa_timeout =
   let doc = "The timeout applied to the IPv6 resolution." in
   let open Arg in
-  value & opt (some timeout) None & info [ "aaaa-timeout" ] ~doc ~docs:docs_dns
+  value
+  & opt (some timeout) None
+  & info [ "aaaa-timeout" ] ~doc ~docv:"TIME" ~docs:docs_dns
 
 let connect_delay =
   let doc =
     "Time to repeat another connection attempt if the others don't respond."
   in
   let open Arg in
-  value & opt (some timeout) None & info [ "connect-delay" ] ~doc ~docs:docs_dns
+  value
+  & opt (some timeout) None
+  & info [ "connect-delay" ] ~doc ~docv:"TIME" ~docs:docs_dns
 
 let connect_timeout =
   let doc = "The timeout applied to $(b,connect())." in
   let open Arg in
   value
   & opt (some timeout) None
-  & info [ "connect-timeout" ] ~doc ~docs:docs_dns
+  & info [ "connect-timeout" ] ~doc ~docv:"TIME" ~docs:docs_dns
 
 let resolve_timeout =
   let doc = "The timeout applied to the domain-name resolution." in
   let open Arg in
   value
   & opt (some timeout) None
-  & info [ "resolve-timeout" ] ~doc ~docs:docs_dns
+  & info [ "resolve-timeout" ] ~doc ~docv:"TIME" ~docs:docs_dns
 
 let resolve_retries =
-  let doc = "The number of attempts to make a connection." in
+  let doc = "The number $(i,N) of attempts to make a connection." in
   let open Arg in
-  value & opt (some int) None & info [ "resolve-retries" ] ~doc ~docs:docs_dns
+  value
+  & opt (some int) None
+  & info [ "resolve-retries" ] ~doc ~docv:"N" ~docs:docs_dns
 
 type happy_eyeballs = {
     aaaa_timeout: int64 option
@@ -435,12 +443,12 @@ let nameserver =
   Arg.conv (parser, pp) ~docv:"<nameserver>"
 
 let nameservers =
-  let doc = "The nameserver used to resolve domain-names." in
+  let doc = "The $(i,NAMESERVER) used to resolve domain-names." in
   let google_com = (`Udp, `Plaintext (Ipaddr.of_string_exn "8.8.8.8", 53)) in
   let open Arg in
   value
   & opt_all nameserver [ google_com ]
-  & info [ "n"; "nameserver" ] ~doc ~docs:docs_dns
+  & info [ "n"; "nameserver" ] ~doc ~docv:"NAMESERVER" ~docs:docs_dns
 
 let setup_nameservers nameservers =
   let tcp, udp =
@@ -465,7 +473,7 @@ let dns =
       ~docs:docs_dns
   in
   let ocaml =
-    Arg.info [ "internal" ]
+    Arg.info [ "ocaml" ]
       ~doc:
         "Domain name resolution is handled by our OCaml implementation (see \
          $(b,ocaml-dns))."
@@ -522,19 +530,24 @@ let possibly_malformed_path =
 let uri =
   let pp_port ppf = function
     | Some port -> Fmt.pf ppf ":%d" port
-    | None -> () in
+    | None -> ()
+  in
   let pp_user_pass ppf = function
     | Some (user, Some pass) -> Fmt.pf ppf "%s:%s@" user pass
     | Some (user, None) -> Fmt.pf ppf "%s@" user
-    | None -> () in
+    | None -> ()
+  in
   let doc = "The request URL." in
   let parser str =
     match Httpcats.decode_uri str with
     | Ok (_tls, scheme, user_pass, host, port, path) ->
         let path' = Pct.path path in
-        if path <> path'
-        then Logs.warn (fun m -> m "%s" possibly_malformed_path);
-        let uri = Fmt.str "%s://%a%s%a%s" scheme pp_user_pass user_pass host pp_port port path' in
+        if path <> path' then
+          Logs.warn (fun m -> m "%s" possibly_malformed_path);
+        let uri =
+          Fmt.str "%s://%a%s%a%s" scheme pp_user_pass user_pass host pp_port
+            port path'
+        in
         Ok uri
     | Error _ as err -> err
   in
@@ -721,3 +734,73 @@ let setup_fields_filter fields =
   Set.(to_list (diff excl incl))
 
 let setup_fields_filter = Term.(const setup_fields_filter $ fields_filter)
+
+type printer =
+  [ `DNS
+  | `IP
+  | `TLS
+  | `HTTP
+  | `Headers_request
+  | `Headers_response
+  | `Body_request
+  | `Body_response ]
+
+let printers =
+  let doc = "String specifying what the output should contain." in
+  let parser str =
+    let show = [] in
+    let show = if String.contains str 'd' then `DNS :: show else show in
+    let show = if String.contains str 'i' then `IP :: show else show in
+    let show = if String.contains str 's' then `TLS :: show else show in
+    let show = if String.contains str 'p' then `HTTP :: show else show in
+    let show =
+      if String.contains str 'H' then `Headers_request :: show else show
+    in
+    let show =
+      if String.contains str 'h' then `Headers_response :: show else show
+    in
+    let show =
+      if String.contains str 'B' then `Body_request :: show else show
+    in
+    let show =
+      if String.contains str 'b' then `Body_response :: show else show
+    in
+    Ok show
+  in
+  let pp ppf lst =
+    let pp_elt ppf = function
+      | `DNS -> Fmt.string ppf "d"
+      | `IP -> Fmt.string ppf "i"
+      | `TLS -> Fmt.string ppf "s"
+      | `HTTP -> Fmt.string ppf "p"
+      | `Headers_request -> Fmt.string ppf "H"
+      | `Headers_response -> Fmt.string ppf "h"
+      | `Body_request -> Fmt.string ppf "B"
+      | `Body_response -> Fmt.string ppf "b"
+    in
+    Fmt.pf ppf "%a" Fmt.(list ~sep:nop pp_elt) lst
+  in
+  let printers = Arg.conv (parser, pp) in
+  Arg.(
+    value
+    & opt printers [ `HTTP; `Headers_response; `Body_response ]
+    & info [ "p"; "printers" ] ~doc)
+
+let format =
+  let open Arg in
+  let hex =
+    info [ "hex" ] ~doc:"Displaying the HTTP response in the hexdump format."
+  in
+  let json =
+    info [ "json" ]
+      ~doc:
+        "Displaying the HTTP response in the JSON format (if the Content-Type \
+         is application/json, otherwise, we use the hexdump format)."
+  in
+  let raw =
+    info [ "raw" ]
+      ~doc:
+        "Displaying the HTTP response as is (if the Content-Type is recognized \
+         as a text)."
+  in
+  value & vflag `None [ (`Hex, hex); (`Json, json); (`Raw, raw) ]

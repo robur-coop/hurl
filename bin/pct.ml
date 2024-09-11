@@ -14,7 +14,7 @@ let safe_path =
   let v = "!$&'()*+,;=" in
   let arr = Array.copy pchar in
   for i = 0 to String.length v - 1 do
-    arr.(Char.code v.[i]) <- true;
+    arr.(Char.code v.[i]) <- true
   done;
   arr.(Char.code '/') <- true;
   arr
@@ -64,5 +64,3 @@ let encode lst =
       lst
   in
   "?" ^ String.concat "&" enc
-
-

@@ -20,13 +20,24 @@ type happy_eyeballs = {
 type nameserver =
   [ `Plaintext of Ipaddr.t * int | `Tls of Tls.Config.client * Ipaddr.t * int ]
 
+type printer =
+  [ `DNS
+  | `IP
+  | `TLS
+  | `HTTP
+  | `Headers_request
+  | `Headers_response
+  | `Body_request
+  | `Body_response ]
+
 val meth : H1.Method.t option Term.t
 val uri : string Term.t
 val request_items : request_item list Term.t
-val hex : bool Term.t
 val follow_redirect : bool Term.t
 val output : Fpath.t option Term.t
 val dns : [ `System | `OCaml ] Term.t
+val printers : printer list Term.t
+val format : [ `Hex | `Json | `Raw | `None ] Term.t
 
 (**/*)
 
