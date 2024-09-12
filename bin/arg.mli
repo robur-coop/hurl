@@ -30,6 +30,12 @@ type printer =
   | `Body_request
   | `Body_response ]
 
+type request = {
+    headers: (string * string) list
+  ; query: string
+  ; body: string Seq.t option
+}
+
 val meth : H1.Method.t option Term.t
 val uri : string Term.t
 val request_items : request_item list Term.t
@@ -37,7 +43,8 @@ val follow_redirect : bool Term.t
 val output : Fpath.t option Term.t
 val dns : [ `System | `OCaml ] Term.t
 val printers : printer list Term.t
-val format : [ `Hex | `Json | `Raw | `None ] Term.t
+val format_of_output : [ `Hex | `Json | `Raw | `None ] Term.t
+val format_of_input : [ `Json | `Form | `Multipart | `Raw ] Term.t
 
 (**/*)
 
@@ -47,3 +54,5 @@ val setup_tls : (Tls.Config.client option * [ `HTTP_1_1 | `H2 ] option) Term.t
 val setup_happy_eyeballs : happy_eyeballs option Term.t
 val setup_nameservers : (Dns.proto * nameserver list) Term.t
 val setup_fields_filter : string list Term.t
+val setup_request_items : request Term.t
+val setup_out : Out.cfg Term.t

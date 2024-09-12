@@ -1,4 +1,5 @@
 let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
+let error_clif ?(man = false) fmt = Fmt.kstr (fun msg -> `Error (man, msg)) fmt
 
 open Cmdliner
 
@@ -236,7 +237,12 @@ let tls_version =
 
 let http_version =
   let doc =
-    "Enforce a specific HTTP version (HTTP/1.1 or H2) for the given request."
+    "Enforce a specific HTTP version (HTTP/1.1 or H2) for the given request. \
+     By default, ALPN negotiation prioritises $(b,h2) and proposes \
+     $(b,http/1.1). The user can force the use of one of the two protocols \
+     during the TLS handshake if TLS is used. If TLS is not used, only \
+     $(b,http/1.1) is used. If the protocol requested by the user is not \
+     available, the protocol proposed by the server is used."
   in
   let parser str =
     match String.lowercase_ascii str with
@@ -440,7 +446,7 @@ let nameserver =
     | `Udp, `Plaintext (ipaddr, port) ->
         Fmt.pf ppf "%a:%d" Ipaddr.pp ipaddr port
   in
-  Arg.conv (parser, pp) ~docv:"<nameserver>"
+  Arg.conv (parser, pp) ~docv:"NAMESERVER"
 
 let nameservers =
   let doc = "The $(i,NAMESERVER) used to resolve domain-names." in
@@ -466,20 +472,21 @@ let setup_nameservers nameservers =
 let setup_nameservers = Term.(ret (const setup_nameservers $ nameservers))
 
 let dns =
+  let open Arg in
   let system =
-    Arg.info [ "system" ]
-      ~doc:
-        "Domain name resolution is done by the system (usually 127.0.0.1:53)."
-      ~docs:docs_dns
+    let doc =
+      "Domain name resolution is done by the system (usually 127.0.0.1:53)."
+    in
+    info [ "system" ] ~doc ~docs:docs_dns
   in
   let ocaml =
-    Arg.info [ "ocaml" ]
-      ~doc:
-        "Domain name resolution is handled by our OCaml implementation (see \
-         $(b,ocaml-dns))."
-      ~docs:docs_dns
+    let doc =
+      "Domain name resolution is handled by our OCaml implementation (see \
+       $(b,ocaml-dns))."
+    in
+    info [ "ocaml" ] ~doc ~docs:docs_dns
   in
-  Arg.(value & vflag `System [ (`System, system); (`OCaml, ocaml) ])
+  value & vflag `System [ (`System, system); (`OCaml, ocaml) ]
 
 let follow_redirect =
   let doc =
@@ -524,8 +531,8 @@ let meth =
 
 let possibly_malformed_path =
   "the url path contains characters that have just been escaped. If you are \
-   trying to specify parameters in the url, you should do so via an item \
-   request (rather than directly in the url)."
+   trying to specify parameters in the url, you should do so via the \
+   command-line (rather than directly in the url)."
 
 let uri =
   let pp_port ppf = function
@@ -786,21 +793,281 @@ let printers =
     & opt printers [ `HTTP; `Headers_response; `Body_response ]
     & info [ "p"; "printers" ] ~doc)
 
-let format =
+let format_of_output =
   let open Arg in
   let hex =
-    info [ "hex" ] ~doc:"Displaying the HTTP response in the hexdump format."
+    let doc = "Displaying the HTTP response in the hexdump format." in
+    info [ "hex" ] ~doc
   in
   let json =
-    info [ "json" ]
-      ~doc:
-        "Displaying the HTTP response in the JSON format (if the Content-Type \
-         is application/json, otherwise, we use the hexdump format)."
+    let doc =
+      "Displaying the HTTP response in the JSON format (if the Content-Type is \
+       application/json, otherwise, we use the hexdump format)."
+    in
+    info [ "json-output" ] ~doc
   in
   let raw =
-    info [ "raw" ]
-      ~doc:
-        "Displaying the HTTP response as is (if the Content-Type is recognized \
-         as a text)."
+    let doc =
+      "Displaying the HTTP response as is (if the Content-Type is recognized \
+       as a text)."
+    in
+    info [ "raw" ] ~doc
   in
   value & vflag `None [ (`Hex, hex); (`Json, json); (`Raw, raw) ]
+
+let format_of_input =
+  let open Arg in
+  let form =
+    let doc =
+      "Data items from the coommand line are serialized as form fields. The \
+       Content-Type is set to application/x-www-form-urlencoded (if not \
+       specified). The presence of any file fields results in a \
+       multipart/form-data request."
+    in
+    info [ "f"; "form" ] ~doc
+  in
+  let multipart =
+    let doc =
+      "Similar to $(b,--form), but always sends a multipart/form-data request \
+       (i.e., even without files)."
+    in
+    info [ "multipart" ] ~doc
+  in
+  let json =
+    let doc =
+      "Data items from the command line are serialized as a JSON object. The \
+       Content-Type and Accept headers are set to application/json (if not \
+       specified)."
+    in
+    info [ "j"; "json" ] ~doc
+  in
+  value & vflag `Json [ (`Form, form); (`Multipart, multipart); (`Json, json) ]
+
+type request = {
+    headers: (string * string) list
+  ; query: string
+  ; body: string Seq.t option
+}
+
+let headers_of_request_items =
+  Fun.flip List.fold_left [] @@ fun acc -> function
+  | Header (k, v) -> (k, v) :: acc | _ -> acc
+
+let query_of_request_items request_items =
+  let parameters =
+    Fun.flip List.fold_left [] @@ fun acc -> function
+    | Url_parameter (k, v) -> (k, [ v ]) :: acc | _ -> acc
+  in
+  Pct.encode (parameters request_items)
+
+type item =
+  | Json of Json.t
+  | Json_from_location of Fpath.t
+  | String_from_location of Fpath.t
+
+let location_to_string location =
+  Miou.Lazy.from_fun @@ fun () ->
+  let ic = open_in (Fpath.to_string location) in
+  let ln = in_channel_length ic in
+  let rs = Bytes.create ln in
+  really_input ic rs 0 ln; close_in ic; Bytes.unsafe_to_string rs
+
+let json_of_request_items request_items =
+  let to_lexemes = function
+    | `Begin -> Seq.return `Os
+    | `Item (name, Json value) -> Seq.cons (`Name name) (Json.to_lexemes value)
+    | `Item (name, Json_from_location location) ->
+        let seq = Json.location_to_lexemes location in
+        Seq.cons (`Name name) seq
+    | `Item (name, String_from_location location) ->
+        let str = Miou.Lazy.force (location_to_string location) in
+        List.to_seq [ `Name name; `String str ]
+    | `End -> Seq.return `Oe
+  in
+  let items =
+    List.fold_left
+      begin
+        fun acc -> function
+          | Header _ | Url_parameter _ | Part _ -> acc
+          | Json (k, v) -> `Item (k, Json v) :: acc
+          | String (k, v) -> `Item (k, Json (`String v)) :: acc
+          | Json_from_location (k, v) -> `Item (k, Json_from_location v) :: acc
+          | String_from_location (k, v) ->
+              `Item (k, String_from_location v) :: acc
+      end
+      [ `End ] (List.rev request_items)
+  in
+  let items = List.to_seq (`Begin :: items) in
+  Seq.(concat (map to_lexemes items))
+
+let stream_of_location ?(size_chunk = 0x800) location =
+  let ic = Miou.Lazy.from_fun @@ fun () -> open_in (Fpath.to_string location) in
+  let buf = Bytes.create size_chunk in
+  fun () ->
+    let ic = Miou.Lazy.force ic in
+    match input ic buf 0 (Bytes.length buf) with
+    | 0 -> close_in ic; None
+    | len -> Some (Bytes.unsafe_to_string buf, 0, len)
+    | exception End_of_file -> close_in ic; None
+
+let parts_of_request_items =
+  let open Multipart_form in
+  Fun.flip List.fold_left [] @@ fun acc -> function
+  | Header _ | Json _ | Url_parameter _ | Json_from_location _ -> acc
+  | Part (name, location) ->
+      let stream = stream_of_location location in
+      let filename = Fpath.basename location in
+      let disposition = Content_disposition.v ~filename name in
+      part ~disposition stream :: acc
+  | String (name, v) ->
+      let stream = Seq.(to_dispenser (return (v, 0, String.length v))) in
+      let disposition = Content_disposition.v name in
+      part ~disposition stream :: acc
+  | String_from_location (name, location) ->
+      let stream = stream_of_location location in
+      let disposition = Content_disposition.v name in
+      part ~disposition stream :: acc
+
+let add_unless_exists headers k v =
+  if List.mem_assoc k headers = false then (k, v) :: headers else headers
+
+let rng ?g:_ len =
+  let res = Bytes.create len in
+  for i = 0 to len - 1 do
+    match Random.int (26 + 26 + 10) with
+    | n when n < 26 -> Bytes.set res i Char.(chr (code 'a' + n))
+    | n when n < 26 + 26 -> Bytes.set res i Char.(chr (code 'A' + n - 26))
+    | n -> Bytes.set res i Char.(chr (code '0' + n - 26 - 26))
+  done;
+  Bytes.unsafe_to_string res
+
+let simple_list_to_multipart_header lst =
+  let open Multipart_form in
+  let fields =
+    Fun.flip List.map lst @@ fun (k, v) ->
+    let field_name = Field_name.v k in
+    match Unstrctrd.of_string v with
+    | Ok (_, unstrctrd) -> Field.Field (field_name, Field.Field, unstrctrd)
+    | Error (`Msg _) -> assert false (* TODO *)
+  in
+  Header.of_list fields
+
+let multipart_header_to_simple_list hdr =
+  let open Multipart_form in
+  let lst = Header.to_list hdr in
+  Fun.flip List.map lst @@ function
+  | Field.Field (_, Content_type, v) ->
+      ("Content-Type", Content_type.to_string v)
+  | Field.Field (_, Content_encoding, v) ->
+      ("Content-Transfer-Encoding", Content_encoding.to_string v)
+  | Field.Field (_, Content_disposition, v) ->
+      ("Content-Disposition", Content_disposition.to_string v)
+  | Field.Field (k, Field, v) -> ((k :> string), Unstrctrd.to_utf_8_string v)
+
+let setup_request_items format_of_input boundary minify request_items =
+  let a_part = function Part _ -> true | _ -> false in
+  let a_complex_json : request_item -> bool = function
+    | Json _ | Json_from_location _ -> true
+    | _ -> false
+  in
+  if request_items = [] then
+    let headers = headers_of_request_items request_items in
+    let query = query_of_request_items request_items in
+    `Ok { headers; query; body= None }
+  else
+    match format_of_input with
+    | `Json -> begin
+        match List.find_opt a_part request_items with
+        | Some (Part (key, _)) ->
+            error_clif "Invalid file fields (perhaps you meant --form?): %s" key
+        | _ ->
+            let headers = headers_of_request_items request_items in
+            let headers =
+              add_unless_exists headers "Content-Type" "application/json"
+            in
+            let query = query_of_request_items request_items in
+            let json = json_of_request_items request_items in
+            let seq = Json.lexemes_to_seq_of_bytes ~minify json in
+            `Ok { headers; query; body= Some seq }
+      end
+    | (`Multipart | `Form) when List.exists a_part request_items -> begin
+        match List.find_opt a_complex_json request_items with
+        | Some (Json _) | Some (Json_from_location _) ->
+            error_clif
+              "Cannot use complex JSON value types with --form/--multipart."
+        | _ ->
+            let headers = headers_of_request_items request_items in
+            let header = simple_list_to_multipart_header headers in
+            let query = query_of_request_items request_items in
+            let parts = parts_of_request_items request_items in
+            let multipart =
+              Multipart_form.multipart ~rng ~header ?boundary parts
+            in
+            let header, stream = Multipart_form.to_stream multipart in
+            let seq = Seq.of_dispenser stream in
+            let seq =
+              Seq.map (fun (str, off, len) -> String.sub str off len) seq
+            in
+            let headers = multipart_header_to_simple_list header in
+            `Ok { headers; query; body= Some seq }
+      end
+    | `Form | `Multipart -> assert false
+
+let boundary =
+  let doc =
+    "Specify a custom boundary string for multipart/form-data requests."
+  in
+  let parser str =
+    let valid =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    in
+    let is_valid = String.contains valid in
+    if String.for_all is_valid str then Ok str
+    else error_msgf "Invalid boundary: %S" str
+  in
+  let boundary = Arg.conv (parser, Fmt.string) in
+  Arg.(value & opt (some boundary) None & info [ "boundary" ] ~doc)
+
+let minify =
+  let doc = "Minify the JSON to send." in
+  Arg.(value & flag & info [ "minify-input" ] ~doc)
+
+let setup_request_items =
+  Term.(
+    ret
+      (const setup_request_items
+      $ format_of_input
+      $ boundary
+      $ minify
+      $ request_items))
+
+let setup_out (quiet, stdout) hxd print format_output fields_filter output =
+  let ppf, finally =
+    match output with
+    | Some location ->
+        let oc = open_out (Fpath.to_string location) in
+        ( Format.make_formatter (output_substring oc) (fun () -> flush oc)
+        , fun () -> close_out oc )
+    | None -> (stdout, Fun.const ())
+  in
+  let meta_and_resp = Miou.Computation.create () in
+  {
+    Out.quiet
+  ; hxd
+  ; format_output
+  ; ppf
+  ; finally
+  ; fields_filter
+  ; meta_and_resp
+  ; show= print
+  }
+
+let setup_out =
+  let open Term in
+  const setup_out
+  $ setup_logs
+  $ setup_hxd
+  $ printers
+  $ format_of_output
+  $ setup_fields_filter
+  $ output

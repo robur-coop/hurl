@@ -13,7 +13,7 @@
   multipart_form
   cmdliner
   httpcats
-  decompress.de
+  decompress.zl
   decompress.gz
   jsonm))
 

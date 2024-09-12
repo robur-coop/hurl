@@ -39,18 +39,10 @@ let gzip ?(len = De.io_buffer_size) () =
     let init () =
       let o = De.bigstring_create len in
       let decoder = Gz.Inf.decoder `Manual ~o in
-      let[@warning "-8"] (`Await decoder
-                           : [ `End of _
-                             | `Flush of _
-                             | `Malformed of _
-                             | `Await of _ ]) =
-        Gz.Inf.decode decoder
-      in
       let acc = k.init () in
       (decoder, o, false, acc)
     in
     let push (decoder, o, full, acc) i =
-      Log.debug (fun m -> m "inflate %d byte(s)" (Bigarray.Array1.dim i));
       if Bigarray.Array1.dim i = 0 then (decoder, o, full, acc)
       else if not full then
         let gzip = Gz.Inf.src decoder i 0 (Bigarray.Array1.dim i) in
@@ -64,6 +56,63 @@ let gzip ?(len = De.io_buffer_size) () =
       if full then k.stop acc
       else
         match inflate_gzip_until_end ~push:k.push ~acc encoder o with
+        | `Partial -> Fmt.failwith "Partial GZip content"
+        | `Ok acc -> k.stop acc
+    in
+    Sink.Sink { init; stop; full; push }
+  in
+  { flow }
+
+let rec inflate_until_await ~push ~acc decoder o =
+  match Zl.Inf.decode decoder with
+  | `Await decoder -> `Continue (decoder, o, acc)
+  | `Flush decoder ->
+      let len = Bigarray.Array1.dim o - Zl.Inf.dst_rem decoder in
+      let acc = push acc (Bigarray.Array1.sub o 0 len) in
+      inflate_until_await ~push ~acc (Zl.Inf.flush decoder) o
+  | `End decoder ->
+      let len = Bigarray.Array1.dim o - Zl.Inf.dst_rem decoder in
+      let acc = push acc (Bigarray.Array1.sub o 0 len) in
+      `Stop (decoder, o, acc)
+  | `Malformed err -> failwith err
+
+let rec inflate_until_end ~push ~acc decoder o =
+  match Zl.Inf.decode decoder with
+  | `Await _decoder -> `Partial
+  | `Flush decoder ->
+      let len = Bigarray.Array1.dim o - Zl.Inf.dst_rem decoder in
+      let acc = push acc (Bigarray.Array1.sub o 0 len) in
+      inflate_until_end ~push ~acc (Zl.Inf.flush decoder) o
+  | `End decoder ->
+      let len = Bigarray.Array1.dim o - Zl.Inf.dst_rem decoder in
+      let acc = push acc (Bigarray.Array1.sub o 0 len) in
+      `Ok acc
+  | `Malformed err -> failwith err
+
+let deflate ?(len = De.io_buffer_size) () =
+  let flow (Sink.Sink k) =
+    let init () =
+      let o = De.bigstring_create len in
+      let allocate bits = De.make_window ~bits in
+      let decoder = Zl.Inf.decoder `Manual ~o ~allocate in
+      let acc = k.init () in
+      (decoder, o, false, acc)
+    in
+    let push (decoder, o, full, acc) i =
+      if Bigarray.Array1.dim i = 0 then (decoder, o, full, acc)
+      else if not full then begin
+        let decoder = Zl.Inf.src decoder i 0 (Bigarray.Array1.dim i) in
+        match inflate_until_await ~push:k.push ~acc decoder o with
+        | `Continue (decoder, o, acc) -> (decoder, o, false, acc)
+        | `Stop (decoder, o, acc) -> (decoder, o, true, acc)
+      end
+      else (decoder, o, true, acc)
+    in
+    let full (_, _, full, acc) = full || k.full acc in
+    let stop (encoder, o, full, acc) =
+      if full then k.stop acc
+      else
+        match inflate_until_end ~push:k.push ~acc encoder o with
         | `Partial -> Fmt.failwith "Partial GZip content"
         | `Ok acc -> k.stop acc
     in
