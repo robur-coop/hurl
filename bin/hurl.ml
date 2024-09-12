@@ -138,12 +138,36 @@ let term =
     $ uri
     $ setup_request_items)
 
+[@@@ocamlformat "disable"]
+
 let cmd =
   let doc =
     "modern, user-friendly command-line HTTP client for the API era in OCaml."
   in
-  let man = [] in
+  let man = [
+      `S "REQUEST ITEMS"
+    ; `P "A request item is a key-value pair which will be included in the \
+          request. The separator used determines the type:"
+    ; `I ("':' HTTP headers:",
+          "Referer:https://h.url Cookie:foo=bar User-Agent:Bacon/1.0")
+    ; `I ("'==' URL parameters to be appended to the request URL:",
+          "search==hurl")
+    ; `I ("'=' Data fields to be serialized into a JSON object (with \
+           $(b,--json), $(b,-j)) or form data (with $(b,--form), $(b,-f)):",
+          "name=Hurl language=OCaml description='CLI HTTP client'")
+    ; `I ("':=' Non-string JSON data fields (only with $(b,--json), $(b,-j)):",
+          "awesome:=true amount:=42 colors='[\"red\", \"green\", \"blue\"]'")
+    ; `I ("'@' Form file fields (only with $(b,--form) or $(b,--multipart)):",
+          "cv@~/Documents/CV.pdf")
+    ; `I ("'=@' A data field like '=', but takes a file path and embeds its \
+           contents:",
+          "essay=@Documents/essay.txt")
+    ; `I ("':=@' A raw JSON field like ':=', but takes a file path and embeds \
+           its content:",
+          "package:=@./package.json")
+    ] in
   Cmd.(v (info "hurl" ~doc ~man)) term
+[@@@ocamlformat "enable"]
 
 let () = Sys.set_signal Sys.sigpipe Sys.Signal_ignore
 let () = exit (Cmd.eval' cmd)
