@@ -32,17 +32,20 @@ let debug_style = `Green
 let pp_header ~pp_h ppf (l, h) =
   match l with
   | Logs.Error ->
-      pp_h ppf err_style (match h with None -> "ERROR" | Some h -> h)
+      let h = Option.value ~default:"ERROR" h in
+      pp_h ppf err_style h
   | Logs.Warning ->
-      pp_h ppf warn_style (match h with None -> "WARN" | Some h -> h)
+      let h = Option.value ~default:"WARN" h in
+      pp_h ppf warn_style h
   | Logs.Info ->
-      pp_h ppf info_style (match h with None -> "INFO" | Some h -> h)
+      let h = Option.value ~default:"INFO" h in
+      pp_h ppf info_style h
   | Logs.Debug ->
-      pp_h ppf debug_style (match h with None -> "DEBUG" | Some h -> h)
-  | Logs.App -> (
-      match h with
-      | Some h -> Fmt.pf ppf "[%a] " Fmt.(styled app_style (fmt "%10s")) h
-      | None -> ())
+      let h = Option.value ~default:"DEBUG" h in
+      pp_h ppf debug_style h
+  | Logs.App ->
+      Fun.flip Option.iter h @@ fun h ->
+      Fmt.pf ppf "[%a] " Fmt.(styled app_style (fmt "%10s")) h
 
 let pp_header =
   let pp_h ppf style h = Fmt.pf ppf "[%a]" Fmt.(styled style (fmt "%10s")) h in
@@ -529,6 +532,10 @@ let meth =
     & opt (some meth) None
     & info [ "m"; "meth"; "method" ] ~doc ~docv:"METHOD")
 
+let max_redirect =
+  let doc = "The number of allowed redirection (when you use $(b,-L))." in
+  Arg.(value & opt int 15 & info [ "redirect" ] ~doc)
+
 let possibly_malformed_path =
   "the url path contains characters that have just been escaped. If you are \
    trying to specify parameters in the url, you should do so via the \
@@ -804,7 +811,7 @@ let format_of_output =
       "Displaying the HTTP response in the JSON format (if the Content-Type is \
        application/json, otherwise, we use the hexdump format)."
     in
-    info [ "json-output" ] ~doc
+    info [ "j"; "json-output" ] ~doc
   in
   let raw =
     let doc =
@@ -839,7 +846,7 @@ let format_of_input =
        Content-Type and Accept headers are set to application/json (if not \
        specified)."
     in
-    info [ "j"; "json" ] ~doc
+    info [ "json-input" ] ~doc
   in
   value & vflag `Json [ (`Form, form); (`Multipart, multipart); (`Json, json) ]
 
@@ -990,7 +997,7 @@ let setup_request_items format_of_input boundary minify request_items =
             let seq = Json.lexemes_to_seq_of_bytes ~minify json in
             `Ok { headers; query; body= Some seq }
       end
-    | (`Multipart | `Form) when List.exists a_part request_items -> begin
+    | `Multipart | `Form -> begin
         match List.find_opt a_complex_json request_items with
         | Some (Json _) | Some (Json_from_location _) ->
             error_clif
@@ -1011,16 +1018,15 @@ let setup_request_items format_of_input boundary minify request_items =
             let headers = multipart_header_to_simple_list header in
             `Ok { headers; query; body= Some seq }
       end
-    | `Form | `Multipart -> assert false
 
 let boundary =
   let doc =
     "Specify a custom boundary string for multipart/form-data requests."
   in
+  let valid =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+  in
   let parser str =
-    let valid =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-    in
     let is_valid = String.contains valid in
     if String.for_all is_valid str then Ok str
     else error_msgf "Invalid boundary: %S" str
@@ -1028,9 +1034,9 @@ let boundary =
   let boundary = Arg.conv (parser, Fmt.string) in
   Arg.(value & opt (some boundary) None & info [ "boundary" ] ~doc)
 
-let minify =
+let minify_input =
   let doc = "Minify the JSON to send." in
-  Arg.(value & flag & info [ "minify-input" ] ~doc)
+  Arg.(value & flag & info [ "minify" ] ~doc)
 
 let setup_request_items =
   Term.(
@@ -1038,36 +1044,5 @@ let setup_request_items =
       (const setup_request_items
       $ format_of_input
       $ boundary
-      $ minify
+      $ minify_input
       $ request_items))
-
-let setup_out (quiet, stdout) hxd print format_output fields_filter output =
-  let ppf, finally =
-    match output with
-    | Some location ->
-        let oc = open_out (Fpath.to_string location) in
-        ( Format.make_formatter (output_substring oc) (fun () -> flush oc)
-        , fun () -> close_out oc )
-    | None -> (stdout, Fun.const ())
-  in
-  let meta_and_resp = Miou.Computation.create () in
-  {
-    Out.quiet
-  ; hxd
-  ; format_output
-  ; ppf
-  ; finally
-  ; fields_filter
-  ; meta_and_resp
-  ; show= print
-  }
-
-let setup_out =
-  let open Term in
-  const setup_out
-  $ setup_logs
-  $ setup_hxd
-  $ printers
-  $ format_of_output
-  $ setup_fields_filter
-  $ output

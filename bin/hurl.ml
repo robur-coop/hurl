@@ -65,8 +65,8 @@ let rec consumer cfg qqueue =
       let (), _source = Stream.run ~from ~via ~into in
       Fmt.pf cfg.ppf "\n%!"; consumer cfg qqueue
 
-let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
-    { Arg.headers; query; body } =
+let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
+    meth uri { Arg.headers; query; body } =
   let uri = uri ^ query in
   let body = Option.map Httpcats.stream body in
   let config =
@@ -75,7 +75,7 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
     | Some `H2 -> Some (`H2 H2.Config.default)
     | None -> None
   in
-  let qqueue = Bqueue.create 16 (* max_redirect *) (Obj.magic () (* TODO *)) in
+  let qqueue = Bqueue.create max_redirect (Obj.magic () (* TODO *)) in
   let fn meta resp state str =
     match (state, str) with
     | `Continue queue, None -> Bqueue.close queue; `New_response
@@ -92,8 +92,8 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
   in
   Fun.protect ~finally:out_cfg.Out.finally @@ fun () ->
   let consumer = Miou.async @@ fun () -> consumer out_cfg qqueue in
-  Httpcats.request ?config ?tls_config ~resolver ~follow_redirect ?meth ~headers
-    ?body ~f:fn ~uri `New_response
+  Httpcats.request ?config ?tls_config ~resolver ~follow_redirect ~max_redirect
+    ?meth ~headers ?body ~f:fn ~uri `New_response
   |> function
   | Ok (_resp, `New_response) -> Bqueue.close qqueue; Miou.await_exn consumer
   | Ok (_resp, `Continue queue) ->
@@ -103,20 +103,17 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect meth uri
       Logs.err (fun m -> m "Got an error: %a" Httpcats.pp_error err);
       Fmt.failwith "%a" Httpcats.pp_error err
 
-let run out_cfg (tls_cfg, http_version) happy_eyeballs_cfg dns_cfg nameservers
-    follow_redirect meth uri request =
-  Miou_unix.run @@ fun () ->
+let run out_cfg (tls_cfg, http_version) (daemon, resolver) follow_redirect
+    max_redirect meth uri request =
   let rng = Mirage_crypto_rng_miou_unix.(initialize (module Pfortuna)) in
-  let daemon, resolver =
-    Resolver.v out_cfg happy_eyeballs_cfg dns_cfg nameservers
-  in
   let finally () =
     Option.iter Happy_eyeballs_miou_unix.kill daemon;
     Mirage_crypto_rng_miou_unix.kill rng
   in
   Fun.protect ~finally @@ fun () ->
   match
-    run out_cfg tls_cfg http_version ~resolver ~follow_redirect meth uri request
+    run out_cfg tls_cfg http_version ~resolver ~follow_redirect max_redirect
+      meth uri request
   with
   | () -> `Ok 0
   | exception Failure msg -> `Error (false, msg)
@@ -128,12 +125,11 @@ let term =
   let open Term in
   ret
     (const run
-    $ setup_out
+    $ Out.setup
     $ setup_tls
-    $ setup_happy_eyeballs
-    $ dns
-    $ setup_nameservers
+    $ Resolver.setup
     $ follow_redirect
+    $ max_redirect
     $ meth
     $ uri
     $ setup_request_items)
@@ -170,4 +166,8 @@ let cmd =
 [@@@ocamlformat "enable"]
 
 let () = Sys.set_signal Sys.sigpipe Sys.Signal_ignore
-let () = exit (Cmd.eval' cmd)
+
+let () =
+  let available = Stdlib.Domain.recommended_domain_count () in
+  let domains = min 1 available in
+  Miou_unix.run ~domains @@ fun () -> exit (Cmd.eval' cmd)

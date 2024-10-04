@@ -47,3 +47,40 @@ let show_headers_response cfg resp =
     Printers.print_headers_response ~fields_filter:cfg.fields_filter resp;
     Fmt.pf cfg.ppf "\n%!"
   end
+
+let setup (quiet, stdout) hxd print format_output fields_filter output =
+  let ppf, finally =
+    match output with
+    | Some location ->
+        let oc = open_out (Fpath.to_string location) in
+        let finally () = close_out oc in
+        let ppf =
+          Format.make_formatter (output_substring oc) (fun () -> flush oc)
+        in
+        (ppf, finally)
+    | None -> (stdout, Fun.const ())
+  in
+  let meta_and_resp = Miou.Computation.create () in
+  {
+    quiet
+  ; hxd
+  ; format_output
+  ; ppf
+  ; finally
+  ; fields_filter
+  ; meta_and_resp
+  ; show= print
+  }
+
+open Arg
+open Cmdliner
+
+let setup =
+  let open Term in
+  const setup
+  $ setup_logs
+  $ setup_hxd
+  $ printers
+  $ format_of_output
+  $ setup_fields_filter
+  $ output

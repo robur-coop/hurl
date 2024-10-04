@@ -37,6 +37,7 @@ type request = {
 }
 
 val meth : H1.Method.t option Term.t
+val max_redirect : int Term.t
 val uri : string Term.t
 val request_items : request_item list Term.t
 val follow_redirect : bool Term.t
@@ -55,4 +56,3 @@ val setup_happy_eyeballs : happy_eyeballs option Term.t
 val setup_nameservers : (Dns.proto * nameserver list) Term.t
 val setup_fields_filter : string list Term.t
 val setup_request_items : request Term.t
-val setup_out : Out.cfg Term.t

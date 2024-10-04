@@ -42,46 +42,41 @@ let dns_getaddrinfo out_cfg dns record domain_name =
       Out.show_dns out_cfg (record, domain_name, set);
       Ok set
 
-let v out_cfg happy_eyeballs_cfg dns_cfg nameservers =
-  match (happy_eyeballs_cfg, dns_cfg) with
-  | None, (`System | `OCaml) -> (None, `System)
-  | Some he, `System ->
-      let {
-        Arg.aaaa_timeout
-      ; connect_delay
-      ; connect_timeout
-      ; resolve_timeout
-      ; resolve_retries
-      } =
-        he
-      in
-      let happy_eyeballs =
+let setup out_cfg happy_eyeballs_cfg dns_cfg nameservers =
+  let happy_eyeballs =
+    match happy_eyeballs_cfg with
+    | None -> None
+    | Some
+        {
+          Arg.aaaa_timeout
+        ; connect_delay
+        ; connect_timeout
+        ; resolve_timeout
+        ; resolve_retries
+        } ->
         Happy_eyeballs.create ?aaaa_timeout ?connect_delay ?connect_timeout
           ?resolve_timeout ?resolve_retries (now ())
-      in
+        |> Option.some
+  in
+  match dns_cfg with
+  | `System ->
       let daemon, resolver =
-        Happy_eyeballs_miou_unix.create ~happy_eyeballs
+        Happy_eyeballs_miou_unix.create ?happy_eyeballs
           ~getaddrinfo:(system_getaddrinfo out_cfg)
           ()
       in
       (Some daemon, `Happy resolver)
-  | Some he, `OCaml ->
-      let {
-        Arg.aaaa_timeout
-      ; connect_delay
-      ; connect_timeout
-      ; resolve_timeout
-      ; resolve_retries
-      } =
-        he
-      in
-      let happy_eyeballs =
-        Happy_eyeballs.create ?aaaa_timeout ?connect_delay ?connect_timeout
-          ?resolve_timeout ?resolve_retries (now ())
-      in
+  | `OCaml ->
       let daemon, resolver =
-        Happy_eyeballs_miou_unix.create ~happy_eyeballs ?getaddrinfo:None ()
+        Happy_eyeballs_miou_unix.create ?happy_eyeballs ?getaddrinfo:None ()
       in
       let dns = Dns_client_miou_unix.create ~nameservers resolver in
       Happy_eyeballs_miou_unix.inject resolver (dns_getaddrinfo out_cfg dns);
       (Some daemon, `Happy resolver)
+
+open Arg
+open Cmdliner
+
+let setup =
+  let open Term in
+  const setup $ Out.setup $ setup_happy_eyeballs $ dns $ setup_nameservers

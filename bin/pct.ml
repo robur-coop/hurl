@@ -1,8 +1,7 @@
+let safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~"
+
 let pchar =
   let arr = Array.make 256 false in
-  let safe =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-~"
-  in
   for i = 0 to String.length safe - 1 do
     arr.(Char.code safe.[i]) <- true
   done;
