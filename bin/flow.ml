@@ -94,7 +94,9 @@ let rec inflate_until_await ~push ~acc decoder o =
 
 let rec inflate_until_end ~push ~acc decoder o =
   match Zl.Inf.decode decoder with
-  | `Await _decoder -> `Partial
+  | `Await _decoder ->
+      let decoder = Zl.Inf.src decoder Bigstringaf.empty 0 0 in
+      inflate_until_end ~push ~acc decoder o
   | `Flush decoder ->
       let len = Bigarray.Array1.dim o - Zl.Inf.dst_rem decoder in
       let acc = push acc (Bigarray.Array1.sub o 0 len) in
@@ -118,6 +120,9 @@ let deflate ?(len = De.io_buffer_size) () =
       if Bigarray.Array1.dim i = 0 then (decoder, o, full, acc)
       else if not full then begin
         let decoder = Zl.Inf.src decoder i 0 (Bigarray.Array1.dim i) in
+        Log.debug (fun m -> m "deflate");
+        let str = Bigstringaf.to_string i in
+        Log.debug (fun m -> m "@[<hov>%a@]" (Hxd_string.pp Hxd.default) str);
         match inflate_until_await ~push:k.push ~acc decoder o with
         | `Continue (decoder, o, acc) -> (decoder, o, false, acc)
         | `Stop (decoder, o, acc) -> (decoder, o, true, acc)
@@ -125,11 +130,11 @@ let deflate ?(len = De.io_buffer_size) () =
       else (decoder, o, true, acc)
     in
     let full (_, _, full, acc) = full || k.full acc in
-    let stop (encoder, o, full, acc) =
+    let stop (decoder, o, full, acc) =
       if full then k.stop acc
       else
-        match inflate_until_end ~push:k.push ~acc encoder o with
-        | `Partial -> Fmt.failwith "Partial GZip content"
+        match inflate_until_end ~push:k.push ~acc decoder o with
+        | `Partial -> Fmt.failwith "Partial Deflate content"
         | `Ok acc -> k.stop acc
     in
     Sink.Sink { init; stop; full; push }

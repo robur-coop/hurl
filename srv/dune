@@ -1,0 +1,16 @@
+(executable
+ (name srv)
+ (package hurl)
+ (public_name hurl.srv)
+ (libraries
+  logs.threaded
+  logs.cli
+  fmt.tty
+  fmt.cli
+  decompress.zl
+  decompress.gz
+  miou.unix
+  cmdliner
+  fpath
+  httpcats
+  jsonm))

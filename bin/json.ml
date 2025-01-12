@@ -6,6 +6,7 @@ type error = [ `Error of Jsonm.error ]
 type eoi = [ `End ]
 
 let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
+let _max_young_size = Sys.word_size / 8 * 256
 
 let rec pp ppf = function
   | `Null -> Fmt.const Fmt.string "()" ppf ()
@@ -16,7 +17,7 @@ let rec pp ppf = function
   | `O lst -> Fmt.Dump.list (Fmt.Dump.pair Fmt.string pp) ppf lst
   | `A lst -> Fmt.Dump.list pp ppf lst
 
-let validate ?(size_chunk = 0x800) ~input k =
+let validate ?(size_chunk = _max_young_size) ~input k =
   let decoder = Jsonm.decoder `Manual in
   let buf = Bytes.create size_chunk in
   let error (`Error err) =
@@ -49,11 +50,11 @@ let validate ?(size_chunk = 0x800) ~input k =
   in
   go [] `Await
 
-let decode ?(size_chunk = 0x800) ~input k =
+let decode ?(size_chunk = _max_young_size) ~input k =
   let decoder = Jsonm.decoder `Manual in
   let buf = Bytes.create size_chunk in
   let rec await k `Await =
-    match input buf 0 size_chunk with
+    match input buf 0 (Bytes.length buf) with
     | len ->
         Jsonm.Manual.src decoder buf 0 len;
         k ()
@@ -105,7 +106,7 @@ module Stack = struct
     | Empty
 end
 
-let encode ?minify ?(size_chunk = 0x800) ~output t =
+let encode ?minify ?(size_chunk = _max_young_size) ~output t =
   let encoder = Jsonm.encoder ?minify `Manual in
   let buf = Bytes.create size_chunk in
   let rec encode k stack value =
@@ -165,18 +166,17 @@ let rec to_lexemes seq = function
       `As ++ seq
 
 let to_lexemes t = to_lexemes Seq.empty t
-let _max_young_size = Sys.word_size / 8 * 256
 
 let of_string ?size_chunk str =
   let size_chunk =
     match size_chunk with
     | None when String.length str <= _max_young_size -> String.length str
-    | None -> 0x800
+    | None -> _max_young_size
     | Some len -> len
   in
   let pos = ref 0 in
   let input buf off len =
-    let len = max len (String.length str - !pos) in
+    let len = min len (String.length str - !pos) in
     Bytes.blit_string str !pos buf off len;
     pos := !pos + len;
     len
@@ -189,7 +189,7 @@ let of_location ?size_chunk location =
   let size_chunk =
     match size_chunk with
     | None when ln < _max_young_size -> ln
-    | None -> 0x800
+    | None -> _max_young_size
     | Some len -> len
   in
   let finally () = close_in ic in
@@ -202,7 +202,7 @@ let validate_location ?size_chunk location =
   let size_chunk =
     match size_chunk with
     | None when ln < _max_young_size -> ln
-    | None -> 0x800
+    | None -> _max_young_size
     | Some len -> len
   in
   let finally () = close_in ic in
@@ -210,18 +210,18 @@ let validate_location ?size_chunk location =
   validate ~size_chunk ~input:(input ic) Result.ok
 
 let pp_as_ocaml_string ?minify ppf v =
-  let buf = Buffer.create 0x800 in
+  let buf = Buffer.create _max_young_size in
   let output str = Buffer.add_string buf str in
   encode ?minify ~output v;
   Fmt.pf ppf "%S" (Buffer.contents buf)
 
 let pp_as_hurl_string ?minify ppf v =
-  let buf = Buffer.create 0x800 in
+  let buf = Buffer.create _max_young_size in
   let output str = Buffer.add_string buf str in
   encode ?minify ~output v;
   Fmt.pf ppf "'%s'" (Str.hurl_escape (Buffer.contents buf))
 
-let input_to_lexemes ?(size_chunk = 0x800) ?(finally = Fun.const ()) ~input =
+let input_to_lexemes ?(size_chunk = _max_young_size) ?(finally = Fun.const ()) ~input =
   let decoder = Jsonm.decoder `Manual in
   let buf = Bytes.create size_chunk in
   let rec await k `Await =
@@ -258,7 +258,7 @@ let location_to_lexemes ?size_chunk location =
   let size_chunk =
     match size_chunk with
     | None when ln <= _max_young_size -> ln
-    | None -> 0x800
+    | None -> _max_young_size
     | Some len -> len
   in
   let finally () = close_in ic in
@@ -287,7 +287,7 @@ let seq_of_string_to_lexemes ?size_chunk (seq : string Seq.t) =
   in
   input_to_lexemes ?size_chunk ?finally:None ~input
 
-let lexemes_to_seq_of_bytes ?(size_chunk = 0x800) ?(minify = false)
+let lexemes_to_seq_of_bytes ?(size_chunk = _max_young_size) ?(minify = false)
     (seq : Jsonm.lexeme Seq.t) =
   let encoder = Jsonm.encoder ~minify `Manual in
   let buf = Bytes.create size_chunk in

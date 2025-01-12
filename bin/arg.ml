@@ -263,9 +263,44 @@ let http_version =
   & opt (some http_version) None
   & info [ "http-version" ] ~doc ~docv:"PROTOCOL" ~docs:docs_tls
 
+let already_alerted = ref false
+let possibly_malformed_path =
+  "the url path contains characters that have just been escaped. If you are \
+   trying to specify parameters in the url, you should do so via the \
+   command-line (rather than directly in the url)."
+
+let uri =
+  let pp_port ppf = function
+    | Some port -> Fmt.pf ppf ":%d" port
+    | None -> ()
+  in
+  let pp_user_pass ppf = function
+    | Some (user, Some pass) -> Fmt.pf ppf "%s:%s@" user pass
+    | Some (user, None) -> Fmt.pf ppf "%s@" user
+    | None -> ()
+  in
+  let doc = "The request URL." in
+  let parser str =
+    match Httpcats.decode_uri str with
+    | Ok (_tls, scheme, user_pass, host, port, path) ->
+        let path' = Pct.path path in
+        if path <> path' && not !already_alerted then begin
+          Logs.warn (fun m -> m "%s" possibly_malformed_path);
+          already_alerted := true
+        end;
+        let uri =
+          Fmt.str "%s://%a%s%a%s" scheme pp_user_pass user_pass host pp_port
+            port path'
+        in
+        Ok uri
+    | Error _ as err -> err
+  in
+  let uri = Arg.conv (parser, Fmt.string) in
+  Arg.(required & pos 0 (some uri) None & info [] ~doc ~docv:"URL")
+
 let now () = Some (Ptime_clock.now ())
 
-let setup_tls authenticator version http_version =
+let setup_tls uri authenticator version http_version =
   let version =
     match version with
     | Some (`Only v) -> Some (v, v)
@@ -276,6 +311,7 @@ let setup_tls authenticator version http_version =
     match authenticator with
     | Some (v, _) -> v now
     | None -> (
+        Logs.debug (fun m -> m "Load certificates from the system");
         match Ca_certs.authenticator () with
         | Ok v -> v
         | Error (`Msg msg) ->
@@ -292,14 +328,20 @@ let setup_tls authenticator version http_version =
     | Some `H2 -> [ "h2" ]
     | None -> [ "h2"; "http/1.1" ]
   in
-  match Tls.Config.client ~authenticator ~alpn_protocols ?version () with
-  | Ok tls_config -> (Some tls_config, http_version)
-  | Error (`Msg msg) ->
+  let domain_name =
+    let ( let* ) = Result.bind in
+    let* (_, _, _, host, _, _) = Httpcats.decode_uri uri in
+    let* domain_name = Domain_name.of_string host in
+    Domain_name.host domain_name in
+  match domain_name, Tls.Config.client ~authenticator ~alpn_protocols ?version () with
+  | Ok host, Ok tls_config -> (Some (Tls.Config.peer tls_config host), http_version)
+  | _, Ok tls_config -> (Some tls_config, http_version)
+  | _, Error (`Msg msg) ->
       Logs.warn (fun m -> m "Impossible to build a TLS configuration: %s" msg);
       (None, http_version)
 
 let setup_tls =
-  Term.(const setup_tls $ authenticator $ tls_version $ http_version)
+  Term.(const setup_tls $ uri $ authenticator $ tls_version $ http_version)
 
 let docs_dns = "DOMAIN NAME SERVICE"
 
@@ -535,38 +577,6 @@ let meth =
 let max_redirect =
   let doc = "The number of allowed redirection (when you use $(b,-L))." in
   Arg.(value & opt int 15 & info [ "redirect" ] ~doc)
-
-let possibly_malformed_path =
-  "the url path contains characters that have just been escaped. If you are \
-   trying to specify parameters in the url, you should do so via the \
-   command-line (rather than directly in the url)."
-
-let uri =
-  let pp_port ppf = function
-    | Some port -> Fmt.pf ppf ":%d" port
-    | None -> ()
-  in
-  let pp_user_pass ppf = function
-    | Some (user, Some pass) -> Fmt.pf ppf "%s:%s@" user pass
-    | Some (user, None) -> Fmt.pf ppf "%s@" user
-    | None -> ()
-  in
-  let doc = "The request URL." in
-  let parser str =
-    match Httpcats.decode_uri str with
-    | Ok (_tls, scheme, user_pass, host, port, path) ->
-        let path' = Pct.path path in
-        if path <> path' then
-          Logs.warn (fun m -> m "%s" possibly_malformed_path);
-        let uri =
-          Fmt.str "%s://%a%s%a%s" scheme pp_user_pass user_pass host pp_port
-            port path'
-        in
-        Ok uri
-    | Error _ as err -> err
-  in
-  let uri = Arg.conv (parser, Fmt.string) in
-  Arg.(required & pos 0 (some uri) None & info [] ~doc ~docv:"URL")
 
 type request_item =
   | Header of string * string

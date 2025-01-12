@@ -1,0 +1,3 @@
+(cram
+ (package hurl)
+ (deps %{bin:hurl} %{bin:hurl.srv}))

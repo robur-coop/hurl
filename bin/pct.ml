@@ -62,4 +62,6 @@ let encode lst =
         k' ^ "=" ^ String.concat "," vs')
       lst
   in
-  "?" ^ String.concat "&" enc
+  match lst with
+  | _ :: _ -> "?" ^ String.concat "&" enc
+  | [] -> ""

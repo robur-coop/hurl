@@ -84,3 +84,8 @@ There are a whole host of options available:
 
 To do this, we advise you to use the `--help` option, which describes all these
 options.
+
+## Examples and tests
+
+If you are interested in such a tool, you can view the tests and use our
+`hurl.srv` server to test the tool.
