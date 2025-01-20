@@ -68,6 +68,7 @@ let rec consumer cfg qqueue =
 let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
     meth uri { Arg.headers; query; body } =
   let uri = uri ^ query in
+  Logs.debug (fun m -> m "run with %s" uri);
   let body = Option.map Httpcats.stream body in
   let config =
     match http_version with
@@ -99,8 +100,8 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
   | Ok (_resp, `Continue queue) ->
       Bqueue.close queue; Bqueue.close qqueue; Miou.await_exn consumer
   | Error err ->
-      Miou.await_exn consumer;
       Logs.err (fun m -> m "Got an error: %a" Httpcats.pp_error err);
+      Miou.cancel consumer;
       Fmt.failwith "%a" Httpcats.pp_error err
 
 let run out_cfg (tls_cfg, http_version) (daemon, resolver) follow_redirect
