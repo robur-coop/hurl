@@ -68,7 +68,7 @@ let rec consumer cfg qqueue =
 let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
     meth uri { Arg.headers; query; body } =
   let uri = uri ^ query in
-  Logs.debug (fun m -> m "run with %s" uri);
+  Logs.debug (fun m -> m "run with %s (body: %b)" uri (Option.is_some body));
   let body = Option.map Httpcats.stream body in
   let config =
     match http_version with

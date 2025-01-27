@@ -587,6 +587,10 @@ type request_item =
   | String_from_location of string * Fpath.t
   | Part of string * Fpath.t
 
+let not_header_and_query = function
+  | Header _ | Url_parameter _ -> false
+  | _ -> true
+
 let pp_request_item ppf = function
   | Header (k, v) -> Fmt.pf ppf "%s:%s" k v
   | Url_parameter (k, v) -> Fmt.pf ppf "%s==%s" k v
@@ -987,7 +991,7 @@ let setup_request_items format_of_input boundary minify request_items =
     | Json _ | Json_from_location _ -> true
     | _ -> false
   in
-  if request_items = [] then
+  if List.filter not_header_and_query request_items = [] then
     let headers = headers_of_request_items request_items in
     let query = query_of_request_items request_items in
     `Ok { headers; query; body= None }
