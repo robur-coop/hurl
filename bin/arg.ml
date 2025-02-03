@@ -264,6 +264,7 @@ let http_version =
   & info [ "http-version" ] ~doc ~docv:"PROTOCOL" ~docs:docs_tls
 
 let already_alerted = ref false
+
 let possibly_malformed_path =
   "the url path contains characters that have just been escaped. If you are \
    trying to specify parameters in the url, you should do so via the \
@@ -330,11 +331,15 @@ let setup_tls uri authenticator version http_version =
   in
   let domain_name =
     let ( let* ) = Result.bind in
-    let* (_, _, _, host, _, _) = Httpcats.decode_uri uri in
+    let* _, _, _, host, _, _ = Httpcats.decode_uri uri in
     let* domain_name = Domain_name.of_string host in
-    Domain_name.host domain_name in
-  match domain_name, Tls.Config.client ~authenticator ~alpn_protocols ?version () with
-  | Ok host, Ok tls_config -> (Some (Tls.Config.peer tls_config host), http_version)
+    Domain_name.host domain_name
+  in
+  match
+    (domain_name, Tls.Config.client ~authenticator ~alpn_protocols ?version ())
+  with
+  | Ok host, Ok tls_config ->
+      (Some (Tls.Config.peer tls_config host), http_version)
   | _, Ok tls_config -> (Some tls_config, http_version)
   | _, Error (`Msg msg) ->
       Logs.warn (fun m -> m "Impossible to build a TLS configuration: %s" msg);

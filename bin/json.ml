@@ -221,7 +221,8 @@ let pp_as_hurl_string ?minify ppf v =
   encode ?minify ~output v;
   Fmt.pf ppf "'%s'" (Str.hurl_escape (Buffer.contents buf))
 
-let input_to_lexemes ?(size_chunk = _max_young_size) ?(finally = Fun.const ()) ~input =
+let input_to_lexemes ?(size_chunk = _max_young_size) ?(finally = Fun.const ())
+    ~input =
   let decoder = Jsonm.decoder `Manual in
   let buf = Bytes.create size_chunk in
   let rec await k `Await =
