@@ -6,7 +6,7 @@
   Server: bin/%%VERSION%%
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Credentials: true
-  Content-Length: 220
+  Content-Length: 198
   Connection: close
   Content-Encoding: gzip
   
@@ -14,10 +14,10 @@
     "gzipped": true,
     "args": {},
     "headers": {
-      "Content-Type": "application/json",
       "User-Agent": "hurl/test",
       "host": "localhost",
-      "transfer-encoding": "chunked"
+      "connection": "close",
+      "content-length": "0"
     },
     "origin": "127.0.0.1",
     "url": "http://localhost/gzip"
@@ -29,7 +29,7 @@
   Server: bin/%%VERSION%%
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Credentials: true
-  Content-Length: 176
+  Content-Length: 151
   Connection: close
   Content-Encoding: deflate
   
@@ -37,10 +37,10 @@
     "deflated": true,
     "args": {},
     "headers": {
-      "Content-Type": "application/json",
       "User-Agent": "hurl/test",
       "host": "localhost",
-      "transfer-encoding": "chunked"
+      "connection": "close",
+      "content-length": "0"
     },
     "origin": "127.0.0.1",
     "url": "http://localhost/deflate"

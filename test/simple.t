@@ -6,16 +6,16 @@
   Server: bin/%%VERSION%%
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Credentials: true
-  Content-Length: 181
+  Content-Length: 159
   Connection: close
   
   {
     "args": {},
     "headers": {
-      "Content-Type": "application/json",
       "User-Agent": "hurl/test",
       "host": "localhost",
-      "transfer-encoding": "chunked"
+      "connection": "close",
+      "content-length": "0"
     },
     "origin": "127.0.0.1",
     "url": "http://localhost/get"
@@ -27,7 +27,7 @@
   Server: bin/%%VERSION%%
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Credentials: true
-  Content-Length: 200
+  Content-Length: 178
   Connection: close
   
   {
@@ -35,10 +35,10 @@
       "foo": "bar"
     },
     "headers": {
-      "Content-Type": "application/json",
       "User-Agent": "hurl/test",
       "host": "localhost",
-      "transfer-encoding": "chunked"
+      "connection": "close",
+      "content-length": "0"
     },
     "origin": "127.0.0.1",
     "url": "http://localhost/get?foo=bar"
@@ -62,10 +62,10 @@
       "foo": "bar"
     },
     "headers": {
-      "Content-Type": "application/json",
       "User-Agent": "hurl/test",
       "host": "localhost",
-      "transfer-encoding": "chunked"
+      "connection": "close",
+      "content-length": "0"
     },
     "origin": "127.0.0.1",
     "url": "http://localhost/get?foo=bar&foo=bar"
