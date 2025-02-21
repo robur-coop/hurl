@@ -25,6 +25,6 @@ build: [
 
 synopsis: ""
 pin-depends: [
-  [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#e020a7a71569b40e9dd552e47ba50b9dc442e73d" ]
+  [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#303e9e5508a0aab6c52920183c114b23e79ab704" ]
   [ "miou.dev" "git+https://github.com/robur-coop/miou.git#1f0bf804c61338b8d0bc7cf15dd1e65f9d5699b3" ]
 ]
