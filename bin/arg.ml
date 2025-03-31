@@ -339,6 +339,8 @@ let setup_tls uri authenticator version http_version =
     (domain_name, Tls.Config.client ~authenticator ~alpn_protocols ?version ())
   with
   | Ok host, Ok tls_config ->
+      Logs.debug (fun m ->
+          m "Add a peer to our TLS configuration: %a" Domain_name.pp host);
       (Some (Tls.Config.peer tls_config host), http_version)
   | _, Ok tls_config -> (Some tls_config, http_version)
   | _, Error (`Msg msg) ->

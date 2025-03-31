@@ -38,8 +38,7 @@ let show_tls cfg = function
 
 let show_http cfg resp =
   if List.mem `HTTP cfg.show then begin
-    Printers.print_response resp;
-    Fmt.pf cfg.ppf "\n%!"
+    Printers.print_http resp; Fmt.pf cfg.ppf "\n%!"
   end
 
 let show_headers_response cfg resp =
@@ -48,17 +47,27 @@ let show_headers_response cfg resp =
     Fmt.pf cfg.ppf "\n%!"
   end
 
+let null =
+  let out_string _ _ _ = () in
+  let out_spaces _ = () in
+  let out_flush _ = () in
+  let out_newline _ = () in
+  let out_indent _ = () in
+  Format.{ out_string; out_spaces; out_flush; out_newline; out_indent }
+  |> Format.formatter_of_out_functions
+
 let setup (quiet, stdout) hxd print format_output fields_filter output =
   let ppf, finally =
-    match output with
-    | Some location ->
+    match (output, List.find_opt (( = ) `Body_response) print) with
+    | _, None -> (null, Fun.const ())
+    | Some location, _ ->
         let oc = open_out (Fpath.to_string location) in
         let finally () = close_out oc in
         let ppf =
           Format.make_formatter (output_substring oc) (fun () -> flush oc)
         in
         (ppf, finally)
-    | None -> (stdout, Fun.const ())
+    | None, _ -> (stdout, Fun.const ())
   in
   let meta_and_resp = Miou.Computation.create () in
   {

@@ -68,7 +68,8 @@ let setup out_cfg happy_eyeballs_cfg dns_cfg nameservers =
       (Some daemon, `Happy resolver)
   | `OCaml ->
       let daemon, resolver =
-        Happy_eyeballs_miou_unix.create ?happy_eyeballs ?getaddrinfo:None ()
+        Happy_eyeballs_miou_unix.create ~timer_interval:(Duration.of_sec 1)
+          ?happy_eyeballs ?getaddrinfo:None ()
       in
       let dns = Dns_client_miou_unix.create ~nameservers resolver in
       Happy_eyeballs_miou_unix.inject resolver (dns_getaddrinfo out_cfg dns);

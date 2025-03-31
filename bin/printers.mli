@@ -1,6 +1,6 @@
 val print_headers : Httpcats.Headers.t -> unit
 val print_address : Ipaddr.t * int -> unit
-val print_response : Httpcats.response -> unit
+val print_http : Httpcats.response -> unit
 
 val print_headers_response :
   ?fields_filter:string list -> Httpcats.response -> unit
