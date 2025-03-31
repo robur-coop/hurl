@@ -329,7 +329,6 @@ let register_pid = function
       Fun.protect ~finally @@ fun () -> output_string oc (string_of_int pid)
 
 let run _quiet on pid =
-  register_pid pid;
   Miou_unix.run @@ fun () ->
   let stop = Httpcats.Server.stop () in
   let switch _sigint = Httpcats.Server.switch stop in
@@ -343,7 +342,14 @@ let run _quiet on pid =
     let host = Fmt.to_to_string pp_sockaddr sockaddr in
     handler ~host meta reqd
   in
-  Httpcats.Server.clear ~stop ~handler sockaddr
+  let ready = Miou.Computation.create () in
+  let prm0 =
+    Miou.async @@ fun () ->
+    Miou.Computation.await_exn ready;
+    register_pid pid
+  in
+  Httpcats.Server.clear ~stop ~ready ~handler sockaddr;
+  Miou.await_exn prm0
 
 open Cmdliner
 

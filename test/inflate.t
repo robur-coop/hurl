@@ -1,4 +1,5 @@
   $ hurl.srv 127.0.0.1:9000 --pid srv.pid &
+  $ ./waitfile.exe srv.pid
   $ hurl --field-filter='-Date' http://localhost:9000/gzip User-Agent:hurl/test
   HTTP/1.1 200 OK
   

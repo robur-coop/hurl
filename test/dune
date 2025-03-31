@@ -1,3 +1,7 @@
 (cram
  (package hurl)
- (deps %{bin:hurl} %{bin:hurl.srv}))
+ (deps %{bin:hurl} waitfile.exe %{bin:hurl.srv}))
+
+(executable
+ (name waitfile)
+ (libraries unix))
