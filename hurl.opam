@@ -7,7 +7,7 @@ bug-reports: "https://github.com/robur-coop/hurl/issues"
 license: "BSD-3-clause"
 
 depends: [
-  "ocaml" {>= "5.0.0"}
+  "ocaml" {>= "5.1.0"}
   "dune" {>= "2.0.0"}
   "httpcats"
   "mirage-crypto-rng-miou-unix"
