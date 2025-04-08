@@ -34,6 +34,17 @@ let pp_version ppf { H1.Version.major; minor } =
   | 2, 0 -> Fmt.(styled (`Fg `Blue) string) ppf "H2"
   | v -> Fmt.(styled (`Fg `Red) (fun ppf (x, y) -> fmt "%d.%d" ppf x y)) ppf v
 
+let pp_meth ppf = function
+  | `CONNECT -> Fmt.(styled (`Fg `Green) string) ppf "CONNECT"
+  | `DELETE -> Fmt.(styled (`Fg `Green) string) ppf "DELETE"
+  | `GET -> Fmt.(styled (`Fg `Green) string) ppf "GET"
+  | `HEAD -> Fmt.(styled (`Fg `Green) string) ppf "HEAD"
+  | `OPTIONS -> Fmt.(styled (`Fg `Green) string) ppf "OPTIONS"
+  | `POST -> Fmt.(styled (`Fg `Green) string) ppf "POST"
+  | `PUT -> Fmt.(styled (`Fg `Green) string) ppf "PUT"
+  | `TRACE -> Fmt.(styled (`Fg `Green) string) ppf "TRACE"
+  | `Other str -> Fmt.(styled (`Fg `Yellow) string) ppf str
+
 let pp_status ppf status =
   let code = H2.Status.to_code status in
   let color =
@@ -49,9 +60,26 @@ let pp_reason ppf = function
       Fmt.string ppf (H2.Status.default_reason_phrase v)
   | `Code _ -> ()
 
+let split ~first ~column str =
+  let rec go acc (off, len) =
+    if len <= 0 then List.rev acc
+    else
+      let len' = Int.min (column - 1) len in
+      let sub = String.sub str off len' in
+      go (sub :: acc) (off + len', len - len')
+  in
+  let len' = Int.min first (String.length str) in
+  let x = String.sub str 0 len' in
+  go [ x ] (len', String.length str - len')
+
 let print_field ppf (name, value) =
-  match wrap ~first:(80 - String.length name + 1) ~column:80 value with
+  let first = 80 - (String.length name + 2) in
+  match wrap ~first ~column:80 value with
   | [] -> Fmt.pf ppf "%a\n%!" Fmt.(styled (`Fg `Cyan) string) name
+  | [ [ huge_line ] ] when first + String.length huge_line > 80 ->
+      let[@warning "-8"] (x :: r) = split ~first ~column:80 huge_line in
+      Fmt.pf ppf "%a: %s\n%!" Fmt.(styled (`Fg `Cyan) string) name x;
+      List.iter (fun str -> Fmt.pf ppf " %s\n%!" str) r
   | [ line ] ->
       Fmt.pf ppf "%a: %s\n%!"
         Fmt.(styled (`Fg `Cyan) string)
@@ -62,15 +90,19 @@ let print_field ppf (name, value) =
         name (String.concat " " x);
       List.iter (fun line -> Fmt.pf ppf "  %s\n%!" (String.concat " " line)) r
 
-let print_http ppf resp =
+let print_response ppf resp =
   Fmt.pf ppf "%a %a %a\n%!" pp_version resp.Httpcats.version pp_status
     resp.Httpcats.status pp_reason resp.Httpcats.status
 
-let print_headers_response ?(fields_filter = []) ppf resp =
+let print_request ppf req =
+  Fmt.pf ppf "%a %s\n%!" pp_meth req.Httpcats.meth
+    req.Httpcats.target
+
+let print_headers ?(fields_filter = []) ppf hdrs =
   List.iter
     (fun (field, value) ->
       if List.mem field fields_filter = false then print_field ppf (field, value))
-    (Httpcats.Headers.to_list resp.Httpcats.headers)
+    (Httpcats.Headers.to_list hdrs)
 
 let print_address ppf (ipaddr, port) =
   let color_of_port =
@@ -110,17 +142,11 @@ let print_tls ppf { Tls.Core.protocol_version; ciphersuite; alpn_protocol; _ } =
     ciphersuite
 
 let print_address value = pr "%a" print_address value
-let print_http value = pr "%a" print_http value
+let print_response value = pr "%a" print_response value
+let print_request value = pr "%a" print_request value
 
-let print_headers_response ?fields_filter value =
-  pr "%a" (print_headers_response ?fields_filter) value
+let print_headers ?fields_filter hdrs =
+  pr "%a" (print_headers ?fields_filter) hdrs 
 
 let print_dns_result value = pr "%a" print_dns_result value
-
-let print_headers value =
-  let pp ppf hdrs =
-    List.iter (print_field ppf) (Httpcats.Headers.to_list hdrs)
-  in
-  pr "%a" pp value
-
 let print_tls value = Option.iter (pr "%a" print_tls) value

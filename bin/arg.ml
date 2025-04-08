@@ -774,7 +774,8 @@ type printer =
   [ `DNS
   | `IP
   | `TLS
-  | `HTTP
+  | `Request
+  | `Response
   | `Headers_request
   | `Headers_response
   | `Body_request
@@ -787,7 +788,8 @@ let printers =
     let show = if String.contains str 'd' then `DNS :: show else show in
     let show = if String.contains str 'i' then `IP :: show else show in
     let show = if String.contains str 's' then `TLS :: show else show in
-    let show = if String.contains str 'p' then `HTTP :: show else show in
+    let show = if String.contains str 'r' then `Response :: show else show in
+    let show = if String.contains str 'R' then `Request :: show else show in
     let show =
       if String.contains str 'H' then `Headers_request :: show else show
     in
@@ -807,7 +809,8 @@ let printers =
       | `DNS -> Fmt.string ppf "d"
       | `IP -> Fmt.string ppf "i"
       | `TLS -> Fmt.string ppf "s"
-      | `HTTP -> Fmt.string ppf "p"
+      | `Response -> Fmt.string ppf "r"
+      | `Request -> Fmt.string ppf "R"
       | `Headers_request -> Fmt.string ppf "H"
       | `Headers_response -> Fmt.string ppf "h"
       | `Body_request -> Fmt.string ppf "B"
@@ -818,7 +821,7 @@ let printers =
   let printers = Arg.conv (parser, pp) in
   Arg.(
     value
-    & opt printers [ `HTTP; `Headers_response; `Body_response ]
+    & opt printers [ `Response; `Headers_response; `Body_response ]
     & info [ "p"; "printers" ] ~doc)
 
 let format_of_output =

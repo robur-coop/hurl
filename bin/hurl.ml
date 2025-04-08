@@ -36,7 +36,7 @@ let uncompress = function
 let rec consumer cfg qqueue =
   match Bqueue.get qqueue with
   | None -> ()
-  | Some (((conn, tls), resp), queue) ->
+  | Some (((conn, tls), req, resp), queue) ->
       let from = Source.of_bqueue queue in
       let (Printer (via, into)) =
         match (content_encoding resp, guess_how_to_print cfg resp) with
@@ -60,7 +60,9 @@ let rec consumer cfg qqueue =
       in
       Out.show_ip cfg conn;
       Out.show_tls cfg tls;
-      Out.show_http cfg resp;
+      Out.show_request cfg req;
+      Out.show_headers_request cfg req;
+      Out.show_response cfg resp;
       Out.show_headers_response cfg resp;
       let (), _source = Stream.run ~from ~via ~into in
       Fmt.pf cfg.ppf "\n%!"; consumer cfg qqueue
@@ -77,18 +79,18 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
     | None -> None
   in
   let qqueue = Bqueue.create max_redirect (Obj.magic () (* TODO *)) in
-  let fn meta resp state str =
+  let fn meta req resp state str =
     match (state, str) with
     | `Continue queue, None -> Bqueue.close queue; `New_response
     | `Continue queue, Some str -> Bqueue.put queue str; `Continue queue
     | `New_response, Some str ->
         Logs.debug (fun m -> m "Got a new response");
         let queue = Bqueue.create 0x100 String.empty in
-        let value = ((meta, resp), queue) in
+        let value = ((meta, req, resp), queue) in
         Bqueue.put queue str; Bqueue.put qqueue value; `Continue queue
     | `New_response, None ->
         let queue = Bqueue.create 0 String.empty in
-        let value = ((meta, resp), queue) in
+        let value = ((meta, req, resp), queue) in
         Bqueue.close queue; Bqueue.put qqueue value; `New_response
   in
   Fun.protect ~finally:out_cfg.Out.finally @@ fun () ->

@@ -24,7 +24,8 @@ type printer =
   [ `DNS
   | `IP
   | `TLS
-  | `HTTP
+  | `Request
+  | `Response
   | `Headers_request
   | `Headers_response
   | `Body_request

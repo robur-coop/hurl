@@ -2,7 +2,8 @@ type show =
   [ `DNS
   | `IP
   | `TLS
-  | `HTTP
+  | `Request
+  | `Response
   | `Headers_request
   | `Headers_response
   | `Body_request
@@ -36,14 +37,30 @@ let show_tls cfg = function
       Printers.print_tls tls; Fmt.pf cfg.ppf "\n%!"
   | _ -> ()
 
-let show_http cfg resp =
-  if List.mem `HTTP cfg.show then begin
-    Printers.print_http resp; Fmt.pf cfg.ppf "\n%!"
+let show_response cfg resp =
+  if List.mem `Response cfg.show then begin
+    Printers.print_response resp; Fmt.pf cfg.ppf "\n%!"
   end
 
-let show_headers_response cfg resp =
-  if List.mem `Headers_response cfg.show then begin
-    Printers.print_headers_response ~fields_filter:cfg.fields_filter resp;
+let show_request cfg req =
+  if List.mem `Request cfg.show then begin
+    Printers.print_request req;
+    Fmt.pf cfg.ppf "\n%!"
+  end
+
+let show_headers_response cfg (resp : Httpcats.response) =
+  let hdrs = resp.Httpcats.headers in
+  let is_empty = H2.Headers.to_list hdrs = [] in
+  if List.mem `Headers_response cfg.show && not is_empty then begin
+    Printers.print_headers ~fields_filter:cfg.fields_filter hdrs;
+    Fmt.pf cfg.ppf "\n%!"
+  end
+
+let show_headers_request cfg (req : Httpcats.request) =
+  let hdrs = req.Httpcats.headers in
+  let is_empty = H2.Headers.to_list hdrs = [] in
+  if List.mem `Headers_request cfg.show && not is_empty then begin
+    Printers.print_headers hdrs;
     Fmt.pf cfg.ppf "\n%!"
   end
 
