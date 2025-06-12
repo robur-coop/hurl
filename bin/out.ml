@@ -39,13 +39,13 @@ let show_tls cfg = function
 
 let show_response cfg resp =
   if List.mem `Response cfg.show then begin
-    Printers.print_response resp; Fmt.pf cfg.ppf "\n%!"
+    Printers.print_response resp;
+    Fmt.pf cfg.ppf "\n%!"
   end
 
 let show_request cfg req =
   if List.mem `Request cfg.show then begin
-    Printers.print_request req;
-    Fmt.pf cfg.ppf "\n%!"
+    Printers.print_request req; Fmt.pf cfg.ppf "\n%!"
   end
 
 let show_headers_response cfg (resp : Httpcats.response) =
@@ -64,14 +64,7 @@ let show_headers_request cfg (req : Httpcats.request) =
     Fmt.pf cfg.ppf "\n%!"
   end
 
-let null =
-  let out_string _ _ _ = () in
-  let out_spaces _ = () in
-  let out_flush _ = () in
-  let out_newline _ = () in
-  let out_indent _ = () in
-  Format.{ out_string; out_spaces; out_flush; out_newline; out_indent }
-  |> Format.formatter_of_out_functions
+let null = Format.make_formatter (fun _ _ _ -> ()) (fun _ -> ())
 
 let setup (quiet, stdout) hxd print format_output fields_filter output =
   let ppf, finally =

@@ -16,6 +16,7 @@ depends: [
   "cmdliner"
   "jsonm"
   "decompress"
+  "bstr"
 ]
 conflicts: [ "result" {< "1.5"} ]
 build: [

@@ -68,7 +68,9 @@ let rec consumer cfg qqueue =
       Fmt.pf cfg.ppf "\n%!"; consumer cfg qqueue
 
 let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
-    meth uri { Arg.headers; query; body } =
+    meth uri { Arg.headers; query; body } cookie =
+  Logs.debug (fun m -> m "Add %d cookie(s)" (List.length cookie));
+  let headers = List.append headers (Cookie.to_headers cookie) in
   let uri = uri ^ query in
   Logs.debug (fun m -> m "run with %s (body: %b)" uri (Option.is_some body));
   let body = Option.map Httpcats.stream body in
@@ -107,7 +109,7 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
       Fmt.failwith "%a" Httpcats.pp_error err
 
 let run out_cfg (tls_cfg, http_version) (daemon, resolver) follow_redirect
-    max_redirect meth uri request =
+    max_redirect meth uri request cookie =
   let rng = Mirage_crypto_rng_miou_unix.(initialize (module Pfortuna)) in
   let finally () =
     Option.iter Happy_eyeballs_miou_unix.kill daemon;
@@ -116,7 +118,7 @@ let run out_cfg (tls_cfg, http_version) (daemon, resolver) follow_redirect
   Fun.protect ~finally @@ fun () ->
   match
     run out_cfg tls_cfg http_version ~resolver ~follow_redirect max_redirect
-      meth uri request
+      meth uri request cookie
   with
   | () -> `Ok 0
   | exception Failure msg -> `Error (false, msg)
@@ -135,7 +137,8 @@ let term =
     $ max_redirect
     $ meth
     $ uri
-    $ setup_request_items)
+    $ setup_request_items
+    $ setup_cookie)
 
 [@@@ocamlformat "disable"]
 

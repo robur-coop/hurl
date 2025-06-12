@@ -57,3 +57,4 @@ val setup_happy_eyeballs : happy_eyeballs option Term.t
 val setup_nameservers : (Dns.proto * nameserver list) Term.t
 val setup_fields_filter : string list Term.t
 val setup_request_items : request Term.t
+val setup_cookie : (string * string) list Term.t

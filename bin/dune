@@ -15,6 +15,9 @@
   httpcats
   decompress.zl
   decompress.gz
+  unstrctrd.parser
+  angstrom
+  bstr
   jsonm))
 
 (ocamllex str)

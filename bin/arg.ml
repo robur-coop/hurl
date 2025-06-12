@@ -1063,10 +1063,28 @@ let minify_input =
   Arg.(value & flag & info [ "minify" ] ~doc)
 
 let setup_request_items =
-  Term.(
-    ret
-      (const setup_request_items
-      $ format_of_input
-      $ boundary
-      $ minify_input
-      $ request_items))
+  let open Term in
+  const setup_request_items
+  $ format_of_input
+  $ boundary
+  $ minify_input
+  $ request_items
+  |> ret
+
+let cookie =
+  let doc = "The cookie file (according RFC822)." in
+  let parser str =
+    match Fpath.of_string str with
+    | Ok _ as v when Sys.file_exists str -> v
+    | Ok v -> error_msgf "%a does not exist" Fpath.pp v
+    | Error _ as err -> err
+  in
+  let open Arg in
+  let cookie = Arg.conv (parser, Fpath.pp) in
+  value
+  & opt (some cookie) None
+  & info [ "cookie" ] ~doc ~docv:"FILE" ~docs:docs_output
+
+let setup_cookie =
+  let open Term in
+  ret (const Cookie.setup $ cookie)
