@@ -95,8 +95,7 @@ let print_response ppf resp =
     resp.Httpcats.status pp_reason resp.Httpcats.status
 
 let print_request ppf req =
-  Fmt.pf ppf "%a %s\n%!" pp_meth req.Httpcats.meth
-    req.Httpcats.target
+  Fmt.pf ppf "%a %s\n%!" pp_meth req.Httpcats.meth req.Httpcats.target
 
 let print_headers ?(fields_filter = []) ppf hdrs =
   List.iter
@@ -146,7 +145,7 @@ let print_response value = pr "%a" print_response value
 let print_request value = pr "%a" print_request value
 
 let print_headers ?fields_filter hdrs =
-  pr "%a" (print_headers ?fields_filter) hdrs 
+  pr "%a" (print_headers ?fields_filter) hdrs
 
 let print_dns_result value = pr "%a" print_dns_result value
 let print_tls value = Option.iter (pr "%a" print_tls) value
