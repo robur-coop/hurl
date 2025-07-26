@@ -1085,6 +1085,6 @@ let cookie =
   & opt (some cookie) None
   & info [ "cookie" ] ~doc ~docv:"FILE" ~docs:docs_output
 
-let setup_cookie =
+let setup_cookies =
   let open Term in
   ret (const Cookie.setup $ cookie)

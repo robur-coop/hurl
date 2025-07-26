@@ -8,10 +8,10 @@ let is_wsp = function ' ' | '\t' -> true | _ -> false
 
 let parser =
   let open Angstrom in
-  take_while1 is_ftext >>= fun field_name ->
+  take_while1 is_ftext >>= fun _field_name ->
   let buf = Bytes.create 0x7ff in
   skip_while is_wsp *> char ':' *> Unstrctrd_parser.unstrctrd buf
-  >>= fun value -> return (field_name, value)
+  >>= fun value -> return value
 
 let parser =
   let open Angstrom in
@@ -25,13 +25,12 @@ let of_filename filename =
   let bstr = Bstr.create 0x7ff in
   let rec go len = function
     | Angstrom.Unbuffered.Done (_, lst) ->
-        let keys, values = List.split lst in
-        let lst = List.map Unstrctrd.without_comments values in
+        let lst = List.map Unstrctrd.without_comments lst in
         let lst = List.map Result.get_ok lst in
         let lst = List.map Unstrctrd.fold_fws lst in
         let lst = List.map Unstrctrd.to_utf_8_string lst in
         let lst = List.map String.trim lst in
-        Ok (List.combine keys lst)
+        Ok lst
     | Fail _ -> error_msgf "Invalid Cookie file"
     | Partial { committed= src_off; continue } -> (
         Bstr.blit bstr ~src_off bstr ~dst_off:0 ~len:(len - src_off);
@@ -52,13 +51,26 @@ let of_filename filename =
   in
   go 0 parser
 
+let to_filename headers =
+  let f name value acc =
+    let unstrctrd = Unstrctrd.of_string (value ^ "\r\n\r\n") in
+    match (String.lowercase_ascii name, unstrctrd) with
+    | "set-cookie", Ok (_, value) -> value :: acc
+    | _ -> acc
+  in
+  Httpcats.Headers.fold ~f ~init:[] headers
+
 let pp =
   let open Fmt in
-  let iter fn = List.iter (fun (k, v) -> fn k v) in
-  Dump.iter_bindings iter (any "cookie") string string
+  Dump.iter List.iter (any "cookie") string
 
 let to_headers =
-  let fn (key, value) = ("Cookie", Fmt.str "%s=%s" key value) in
+  let fn value =
+    (* NOTE(dinosaure): delete attributes. *)
+    match String.split_on_char ';' value with
+    | [ value ] | value :: _ -> ("Cookie", Fmt.str "%s" value)
+    | [] -> assert false
+  in
   List.map fn
 
 let setup = function
