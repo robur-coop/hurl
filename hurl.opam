@@ -28,4 +28,5 @@ synopsis: "Hurl, a simple command-line HTTP client"
 pin-depends: [
   [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#f9911ea5f8c935bde2bd5aac581d029c1d623988" ]
   [ "miou.dev" "git+https://github.com/robur-coop/miou.git#7a1d4097e93317fd154b8a87752045eef5cefa3a" ]
+  [ "h1.dev" "git+https://github.com/robur-coop/ocaml-h1.git#263fdf3afa72966793ee70ef18102bb3a318a4cf" ]
 ]
