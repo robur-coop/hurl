@@ -74,5 +74,4 @@
   $ hurl http://localhost:8000/robot.txt --print=b
   User-Agent: *
   Disallow: /deny
-  
   $ kill -INT $(cat srv.pid)
