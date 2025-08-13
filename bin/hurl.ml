@@ -33,7 +33,7 @@ let uncompress = function
   | `Gzip -> Flow.(to_bigstring () % gzip () % to_string)
   | `Deflate -> Flow.(to_bigstring () % deflate () % to_string)
 
-let rec consumer cfg qqueue =
+let rec consumer first cfg qqueue =
   match Bqueue.get qqueue with
   | None -> ()
   | Some (((conn, tls), req, resp), queue) ->
@@ -58,6 +58,7 @@ let rec consumer cfg qqueue =
         | None, `Text -> Printer (Flow.identity, Sink.to_formatter cfg.ppf)
         | Some `Unknown, _ -> Printer (Flow.identity, Sink.hex cfg.hxd cfg.ppf)
       in
+      if not first then Fmt.pr "\n%!";
       Out.show_ip cfg conn;
       Out.show_tls cfg tls;
       Out.show_request cfg req;
@@ -65,7 +66,7 @@ let rec consumer cfg qqueue =
       Out.show_response cfg resp;
       Out.show_headers_response cfg resp;
       let (), _source = Stream.run ~from ~via ~into in
-      Fmt.pf cfg.ppf "\n%!"; consumer cfg qqueue
+      consumer false cfg qqueue
 
 let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
     meth uri { Arg.headers; query; body } cookie =
@@ -96,7 +97,7 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
         Bqueue.close queue; Bqueue.put qqueue value; `New_response
   in
   Fun.protect ~finally:out_cfg.Out.finally @@ fun () ->
-  let consumer = Miou.async @@ fun () -> consumer out_cfg qqueue in
+  let consumer = Miou.async @@ fun () -> consumer true out_cfg qqueue in
   Httpcats.request ?config ?tls_config ~resolver ~follow_redirect ~max_redirect
     ?meth ~headers ?body ~fn ~uri `New_response
   |> function
