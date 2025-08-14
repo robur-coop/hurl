@@ -94,6 +94,9 @@ let rec consumer first cfg qqueue =
          "\n" to separate the previous one and the current one. *)
       if not first then Fmt.pr "\n%!";
       go datas;
+      (* NOTE(dinosaure): if we show up some meta-data and we would like to show
+         the body of the response, we must separate these informations and the
+         body of the response (regardless the format of it). *)
       if datas <> [] && List.mem `Body_response cfg.show then Fmt.pr "\n%!";
       let (), _source = Stream.run ~from ~via ~into in
       consumer false cfg qqueue
