@@ -33,10 +33,21 @@ let uncompress = function
   | `Gzip -> Flow.(to_bigstring () % gzip () % to_string)
   | `Deflate -> Flow.(to_bigstring () % deflate () % to_string)
 
+let show = function
+  | `DNS -> ()
+  | `IP conn -> Printers.print_address conn
+  | `TLS tls -> Printers.print_tls tls
+  | `Request (req : Httpcats.request) -> Printers.print_request req
+  | `Headers_request (req : Httpcats.request) ->
+      Printers.print_headers req.Httpcats.headers
+  | `Response (resp : Httpcats.response) -> Printers.print_response resp
+  | `Headers_response (resp : Httpcats.response) ->
+      Printers.print_headers resp.Httpcats.headers
+
 let rec consumer first cfg qqueue =
   match Bqueue.get qqueue with
   | None -> ()
-  | Some (((conn, tls), req, resp), queue) ->
+  | Some (((conn, tls), (req : Httpcats.request), resp), queue) ->
       let from = Source.of_bqueue queue in
       let (Printer (via, into)) =
         match (content_encoding resp, guess_how_to_print cfg resp) with
@@ -58,13 +69,32 @@ let rec consumer first cfg qqueue =
         | None, `Text -> Printer (Flow.identity, Sink.to_formatter cfg.ppf)
         | Some `Unknown, _ -> Printer (Flow.identity, Sink.hex cfg.hxd cfg.ppf)
       in
+      let fn = function
+        | `DNS -> if first then Some `DNS else None
+        | `IP -> Some (`IP conn)
+        | `TLS -> Some (`TLS tls)
+        | `Request -> Some (`Request req)
+        | `Headers_request ->
+            let is_empty = H2.Headers.to_list req.Httpcats.headers = [] in
+            if not is_empty then Some (`Headers_request req) else None
+        | `Body_request -> None (* TODO *)
+        | `Response -> Some (`Response resp)
+        | `Headers_response ->
+            let is_empty = H2.Headers.to_list resp.Httpcats.headers = [] in
+            if not is_empty then Some (`Headers_response resp) else None
+        | `Body_response -> None (* NOTE(dinosaure): done by [Stream.run]. *)
+      in
+      let datas = List.filter_map fn cfg.show in
+      let rec go = function
+        | [] -> ()
+        | [ x ] -> show x
+        | x :: r -> show x; Fmt.pr "\n%!"; go r
+      in
+      (* NOTE(dinosaure): if we need to show a second request, we must add a
+         "\n" to separate the previous one and the current one. *)
       if not first then Fmt.pr "\n%!";
-      Out.show_ip cfg conn;
-      Out.show_tls cfg tls;
-      Out.show_request cfg req;
-      Out.show_headers_request cfg req;
-      Out.show_response cfg resp;
-      Out.show_headers_response cfg resp;
+      go datas;
+      if datas <> [] && List.mem `Body_response cfg.show then Fmt.pr "\n%!";
       let (), _source = Stream.run ~from ~via ~into in
       consumer false cfg qqueue
 

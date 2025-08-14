@@ -23,7 +23,8 @@ let system_getaddrinfo out_cfg record domain_name =
             | Unix.ADDR_UNIX _ -> set)
           Ipaddr.Set.empty addrs
       in
-      Out.show_dns out_cfg (record, domain_name, set);
+      if List.mem `DNS out_cfg.Out.show && Ipaddr.Set.is_empty set = false then
+        Printers.print_dns_result (record, domain_name, set);
       if Ipaddr.Set.is_empty set then
         error_msgf "%a not found as an inet service" Domain_name.pp domain_name
       else Ok set
@@ -34,12 +35,14 @@ let dns_getaddrinfo out_cfg dns record domain_name =
   | `A ->
       let* ipaddr = Dns_client_miou_unix.gethostbyname dns domain_name in
       let set = Ipaddr.(Set.singleton (V4 ipaddr)) in
-      Out.show_dns out_cfg (record, domain_name, set);
+      if List.mem `DNS out_cfg.Out.show && Ipaddr.Set.is_empty set = false then
+        Printers.print_dns_result (record, domain_name, set);
       Ok set
   | `AAAA ->
       let* ipaddr = Dns_client_miou_unix.gethostbyname6 dns domain_name in
       let set = Ipaddr.(Set.singleton (V6 ipaddr)) in
-      Out.show_dns out_cfg (record, domain_name, set);
+      if List.mem `DNS out_cfg.Out.show && Ipaddr.Set.is_empty set = false then
+        Printers.print_dns_result (record, domain_name, set);
       Ok set
 
 let setup out_cfg happy_eyeballs_cfg dns_cfg nameservers =

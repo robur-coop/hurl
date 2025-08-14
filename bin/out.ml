@@ -9,6 +9,30 @@ type show =
   | `Body_request
   | `Body_response ]
 
+let pp_show ppf = function
+  | `DNS -> Fmt.string ppf "dns"
+  | `IP -> Fmt.string ppf "ip"
+  | `TLS -> Fmt.string ppf "tls"
+  | `Request -> Fmt.string ppf "request"
+  | `Response -> Fmt.string ppf "response"
+  | `Headers_request -> Fmt.string ppf "request:headers"
+  | `Headers_response -> Fmt.string ppf "response:headers"
+  | `Body_request -> Fmt.string ppf "request:body"
+  | `Body_response -> Fmt.string ppf "response:body"
+
+let show_to_int = function
+  | `DNS -> 0
+  | `IP -> 1
+  | `TLS -> 2
+  | `Request -> 3
+  | `Headers_request -> 4
+  | `Body_request -> 5
+  | `Response -> 6
+  | `Headers_response -> 7
+  | `Body_response -> 8
+
+let show_compare a b = show_to_int a - show_to_int b
+
 type cfg = {
     quiet: bool
   ; ppf: Format.formatter
@@ -23,44 +47,6 @@ type cfg = {
 let show_dns cfg (record, domain_name, set) =
   if List.mem `DNS cfg.show && Ipaddr.Set.is_empty set = false then begin
     Printers.print_dns_result (record, domain_name, set);
-    Fmt.pf cfg.ppf "\n%!"
-  end
-
-let show_ip cfg conn =
-  if List.mem `IP cfg.show then begin
-    Printers.print_address conn;
-    Fmt.pf cfg.ppf "\n%!"
-  end
-
-let show_tls cfg = function
-  | Some _ as tls when List.mem `TLS cfg.show ->
-      Printers.print_tls tls; Fmt.pf cfg.ppf "\n%!"
-  | _ -> ()
-
-let show_response cfg resp =
-  if List.mem `Response cfg.show then begin
-    Printers.print_response resp;
-    Fmt.pf cfg.ppf "\n%!"
-  end
-
-let show_request cfg req =
-  if List.mem `Request cfg.show then begin
-    Printers.print_request req; Fmt.pf cfg.ppf "\n%!"
-  end
-
-let show_headers_response cfg (resp : Httpcats.response) =
-  let hdrs = resp.Httpcats.headers in
-  let is_empty = H2.Headers.to_list hdrs = [] in
-  if List.mem `Headers_response cfg.show && not is_empty then begin
-    Printers.print_headers ~fields_filter:cfg.fields_filter hdrs;
-    Fmt.pf cfg.ppf "\n%!"
-  end
-
-let show_headers_request cfg (req : Httpcats.request) =
-  let hdrs = req.Httpcats.headers in
-  let is_empty = H2.Headers.to_list hdrs = [] in
-  if List.mem `Headers_request cfg.show && not is_empty then begin
-    Printers.print_headers hdrs;
     Fmt.pf cfg.ppf "\n%!"
   end
 
@@ -80,6 +66,7 @@ let setup (quiet, stdout) hxd print format_output fields_filter output =
     | None, _ -> (stdout, Fun.const ())
   in
   let meta_and_resp = Miou.Computation.create () in
+  let show = List.sort show_compare print in
   {
     quiet
   ; hxd
@@ -88,7 +75,7 @@ let setup (quiet, stdout) hxd print format_output fields_filter output =
   ; finally
   ; fields_filter
   ; meta_and_resp
-  ; show= print
+  ; show
   }
 
 open Arg
