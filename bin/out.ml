@@ -57,11 +57,18 @@ let setup (quiet, stdout) hxd print format_output fields_filter output =
     match (output, List.find_opt (( = ) `Body_response) print) with
     | _, None -> (null, Fun.const ())
     | Some location, _ ->
-        let oc = open_out (Fpath.to_string location) in
-        let finally () = close_out oc in
-        let ppf =
-          Format.make_formatter (output_substring oc) (fun () -> flush oc)
+        let location = Fpath.to_string location in
+        let oc =
+          Lazy.from_fun @@ fun () ->
+          Logs.debug (fun m -> m "open_out_bin(%s)" location);
+          open_out_bin location
         in
+        let finally () = close_out (Lazy.force oc) in
+        let output_substring str off len =
+          output_substring (Lazy.force oc) str off len
+        in
+        let flush () = flush (Lazy.force oc) in
+        let ppf = Format.make_formatter output_substring flush in
         (ppf, finally)
     | None, _ -> (stdout, Fun.const ())
   in
