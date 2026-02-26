@@ -74,4 +74,6 @@
   $ hurl http://localhost:8000/robot.txt -p=b
   User-Agent: *
   Disallow: /deny
+  $ hurl http://localhost:8000/get -p=b foo=bar -o file.json
+  $ cat file.json
   $ kill -INT $(cat srv.pid)
