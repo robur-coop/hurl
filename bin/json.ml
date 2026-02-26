@@ -149,8 +149,7 @@ let rec to_lexemes seq = function
   | `O ms ->
       let seq =
         List.fold_left
-          begin
-            fun seq (k, v) -> `Name k ++ to_lexemes seq v
+          begin fun seq (k, v) -> `Name k ++ to_lexemes seq v
           end
           (`Oe ++ seq) (List.rev ms)
       in
@@ -158,8 +157,7 @@ let rec to_lexemes seq = function
   | `A vs ->
       let seq =
         List.fold_left
-          begin
-            fun seq v -> to_lexemes seq v
+          begin fun seq v -> to_lexemes seq v
           end
           (`Ae ++ seq) (List.rev vs)
       in
@@ -231,13 +229,11 @@ let input_to_lexemes ?(size_chunk = _max_young_size) ?(finally = Fun.const ())
         Jsonm.Manual.src decoder buf 0 len;
         k ()
     | exception End_of_file ->
-        begin
-          try finally () with exn -> raise (Fun.Finally_raised exn)
+        begin try finally () with exn -> raise (Fun.Finally_raised exn)
         end;
         Fmt.failwith "Partial JSON input"
   and error (`Error err) =
-    begin
-      try finally () with exn -> raise (Fun.Finally_raised exn)
+    begin try finally () with exn -> raise (Fun.Finally_raised exn)
     end;
     Fmt.failwith "Invalid JSON input: %a" Jsonm.pp_error err
   and top () =
@@ -245,8 +241,7 @@ let input_to_lexemes ?(size_chunk = _max_young_size) ?(finally = Fun.const ())
     | #await as v -> await top v
     | #error as v -> error v
     | #eoi ->
-        begin
-          try finally () with exn -> raise (Fun.Finally_raised exn)
+        begin try finally () with exn -> raise (Fun.Finally_raised exn)
         end;
         None
     | `Lexeme (#Jsonm.lexeme as lexeme) -> Some lexeme

@@ -16,12 +16,11 @@ let wrap ?first ~column str =
   let add_line lines = [] :: lines in
   let _, _, rlines =
     List.fold_left
-      begin
-        fun (width, c, acc) word ->
-          let wlen = String.length word in
-          let len = width + wlen in
-          if len >= c then (wlen, column, add_word word (add_line acc))
-          else (len, c, add_word word acc)
+      begin fun (width, c, acc) word ->
+        let wlen = String.length word in
+        let len = width + wlen in
+        if len >= c then (wlen, column, add_word word (add_line acc))
+        else (len, c, add_word word acc)
       end
       (0, first, []) words
   in
