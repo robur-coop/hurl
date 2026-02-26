@@ -76,4 +76,15 @@
   Disallow: /deny
   $ hurl http://localhost:8000/get -p=b foo=bar -o file.json
   $ cat file.json
+  {
+    "args": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "user-agent": "hurl/0.2.0-2-g86c97a8",
+      "host": "localhost",
+      "transfer-encoding": "chunked"
+    },
+    "origin": "127.0.0.1",
+    "url": "http://localhost/get"
+  }
   $ kill -INT $(cat srv.pid)
