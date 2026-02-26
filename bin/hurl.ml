@@ -203,7 +203,7 @@ let cmd =
           "package:=@./package.json")
     ; `S "METADATA"
     ; `P "The user can print $(i,metadata) such as response header or request \
-          body with the $(b,--print)/$(b,-p) option. Here is the list of \
+          body with the $(b,--printers)/$(b,-p) option. Here is the list of \
           elements that can be displayed."
     ; `I ("d", "The result of the DNS resolution.")
     ; `I ("i", "The IP address of the HTTP server.")
