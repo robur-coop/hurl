@@ -201,6 +201,19 @@ let cmd =
     ; `I ("':=@' A raw JSON field like ':=', but takes a file path and embeds \
            its content:",
           "package:=@./package.json")
+    ; `S "METADATA"
+    ; `P "The user can print $(i,metadata) such as response header or request \
+          body with the $(b,--printers)/$(b,-p) option. Here is the list of \
+          elements that can be displayed."
+    ; `I ("d", "The result of the DNS resolution.")
+    ; `I ("i", "The IP address of the HTTP server.")
+    ; `I ("s", "TLS parameters used to secure the connection.")
+    ; `I ("r", "The HTTP response code")
+    ; `I ("R", "The HTTP request method")
+    ; `I ("h", "The HTTP header of the response")
+    ; `I ("H", "The HTTP header of the request")
+    ; `I ("b", "The body response")
+    ; `I ("B", "The body request")
     ] in
   Cmd.(v (info "hurl" ~doc ~man)) term
 [@@@ocamlformat "enable"]

@@ -60,12 +60,11 @@ let consume str command =
   let command = ref command in
   while !len > 0 do
     let process = expand (str, !off, !len) !command in
-    begin
-      match unroll process with
-      | Some shift ->
-          off := !off + shift;
-          len := !len - shift
-      | None -> ()
+    begin match unroll process with
+    | Some shift ->
+        off := !off + shift;
+        len := !len - shift
+    | None -> ()
     end;
     command := execute process
   done;

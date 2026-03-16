@@ -74,4 +74,17 @@
   $ hurl http://localhost:8000/robot.txt -p=b
   User-Agent: *
   Disallow: /deny
+  $ hurl http://localhost:8000/get -p=b foo=bar User-Agent:hurl/test -o file.json
+  $ cat file.json
+  {
+    "args": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "User-Agent": "hurl/test",
+      "host": "localhost",
+      "transfer-encoding": "chunked"
+    },
+    "origin": "127.0.0.1",
+    "url": "http://localhost/get"
+  }
   $ kill -INT $(cat srv.pid)

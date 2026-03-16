@@ -6,6 +6,7 @@ open Cmdliner
 let docs_output = "OUTPUT"
 let docs_tls = "TRANSPORT LAYER SECURITY"
 let docs_hexdump = "HEX OUTPUT"
+let docs_meta = "METADATA"
 
 let verbosity =
   let env = Cmd.Env.info "HURL_LOGS" in
@@ -511,8 +512,7 @@ let nameservers =
 let setup_nameservers nameservers =
   let tcp, udp =
     List.partition_map
-      begin
-        function `Udp, v -> Either.Right v | `Tcp, v -> Either.Left v
+      begin function `Udp, v -> Either.Right v | `Tcp, v -> Either.Left v
       end
       nameservers
   in
@@ -632,18 +632,17 @@ let parser_key str =
   let idx = ref 0 and stop = ref false and to_escape = ref false in
   let buf = Buffer.create (String.length str) in
   while !idx < String.length str && not !stop do
-    begin
-      match (str.[!idx], !to_escape) with
-      | _, true ->
-          Buffer.add_char buf str.[!idx];
-          incr idx
-      | (':' | '=' | '@'), _ -> stop := true
-      | '\\', _ ->
-          if valid_to_escape str.[!idx] then to_escape := true
-          else Buffer.add_char buf '\\'
-      | chr, false ->
-          if valid_key_chr chr then Buffer.add_char buf chr
-          else Fmt.invalid_arg "Invalid key: %S" str
+    begin match (str.[!idx], !to_escape) with
+    | _, true ->
+        Buffer.add_char buf str.[!idx];
+        incr idx
+    | (':' | '=' | '@'), _ -> stop := true
+    | '\\', _ ->
+        if valid_to_escape str.[!idx] then to_escape := true
+        else Buffer.add_char buf '\\'
+    | chr, false ->
+        if valid_key_chr chr then Buffer.add_char buf chr
+        else Fmt.invalid_arg "Invalid key: %S" str
     end;
     incr idx
   done;
@@ -819,10 +818,10 @@ let printers =
     Fmt.pf ppf "%a" Fmt.(list ~sep:nop pp_elt) lst
   in
   let printers = Arg.conv (parser, pp) in
-  Arg.(
-    value
-    & opt printers [ `Response; `Headers_response; `Body_response ]
-    & info [ "p"; "printers" ] ~doc)
+  let open Arg in
+  value
+  & opt printers [ `Response; `Headers_response; `Body_response ]
+  & info [ "p"; "printers" ] ~doc ~docs:docs_meta
 
 let format_of_output =
   let open Arg in
@@ -917,14 +916,13 @@ let json_of_request_items request_items =
   in
   let items =
     List.fold_left
-      begin
-        fun acc -> function
-          | Header _ | Url_parameter _ | Part _ -> acc
-          | Json (k, v) -> `Item (k, Json v) :: acc
-          | String (k, v) -> `Item (k, Json (`String v)) :: acc
-          | Json_from_location (k, v) -> `Item (k, Json_from_location v) :: acc
-          | String_from_location (k, v) ->
-              `Item (k, String_from_location v) :: acc
+      begin fun acc -> function
+        | Header _ | Url_parameter _ | Part _ -> acc
+        | Json (k, v) -> `Item (k, Json v) :: acc
+        | String (k, v) -> `Item (k, Json (`String v)) :: acc
+        | Json_from_location (k, v) -> `Item (k, Json_from_location v) :: acc
+        | String_from_location (k, v) ->
+            `Item (k, String_from_location v) :: acc
       end
       [ `End ] (List.rev request_items)
   in
