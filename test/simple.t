@@ -74,13 +74,13 @@
   $ hurl http://localhost:8000/robot.txt -p=b
   User-Agent: *
   Disallow: /deny
-  $ hurl http://localhost:8000/get -p=b foo=bar -o file.json
+  $ hurl http://localhost:8000/get -p=b foo=bar User-Agent:hurl/test -o file.json
   $ cat file.json
   {
     "args": {},
     "headers": {
       "Content-Type": "application/json",
-      "user-agent": "hurl/0.2.0-2-g86c97a8",
+      "User-Agent": "hurl/test",
       "host": "localhost",
       "transfer-encoding": "chunked"
     },
