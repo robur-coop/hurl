@@ -348,7 +348,7 @@ let run _quiet on pid =
     Miou.Computation.await_exn ready;
     register_pid pid
   in
-  Httpcats.Server.clear ~stop ~ready ~handler sockaddr;
+  Httpcats.Server.clear ~stop ~ready ~handler (Httpcats.Server.Bind sockaddr);
   Miou.await_exn prm0
 
 open Cmdliner
