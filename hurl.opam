@@ -27,5 +27,6 @@ run-test: [ "dune" "runtest" "-p" name "-j1" ]
 synopsis: "Hurl, a simple command-line HTTP client"
 x-ci-accept-failures: ["debian-11"]
 pin-depends: [
-  [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#64afbc08af9eca9cbe3805d75e163c9e1bec2ff3" ]
+  [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#6b19476a1fa95cdee34150ba8e4f5636d343b908" ]
+  [ "miou.dev" "git+https://github.com/robur-coop/miou.git#4e8fd306c305142035f65a1339ca1aa9f011c955" ]
 ]
