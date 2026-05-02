@@ -338,7 +338,7 @@ let run _quiet on pid =
     let port = snd on in
     Unix.ADDR_INET (inet_addr, port)
   in
-  let handler meta reqd =
+  let handler meta _conn reqd =
     let host = Fmt.to_to_string pp_sockaddr sockaddr in
     handler ~host meta reqd
   in
