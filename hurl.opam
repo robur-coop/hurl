@@ -9,7 +9,7 @@ license: "BSD-3-clause"
 depends: [
   "ocaml" {>= "5.1.0"}
   "dune" {>= "2.8.0"}
-  "httpcats" {>= "0.1.0"}
+  "httpcats" {>= "0.3.0"}
   "mirage-crypto-rng-miou-unix"
   "hxd" {>= "0.3.4"}
   "multipart_form" {>= "0.6.0"}
@@ -26,7 +26,3 @@ build: [
 run-test: [ "dune" "runtest" "-p" name "-j1" ]
 synopsis: "Hurl, a simple command-line HTTP client"
 x-ci-accept-failures: ["debian-11"]
-pin-depends: [
-  [ "httpcats.dev" "git+https://github.com/robur-coop/httpcats.git#6b19476a1fa95cdee34150ba8e4f5636d343b908" ]
-  [ "miou.dev" "git+https://github.com/robur-coop/miou.git#4e8fd306c305142035f65a1339ca1aa9f011c955" ]
-]
