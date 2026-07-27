@@ -144,10 +144,9 @@ let run out_cfg ~resolver tls_config http_version ~follow_redirect max_redirect
 
 let run out_cfg (tls_cfg, http_version) (daemon, resolver) follow_redirect
     max_redirect meth uri request cookies =
-  let rng = Mirage_crypto_rng_miou_unix.(initialize (module Pfortuna)) in
+  Mirage_crypto_rng_unix.use_default ();
   let finally () =
-    Option.iter Happy_eyeballs_miou_unix.kill daemon;
-    Mirage_crypto_rng_miou_unix.kill rng
+    Option.iter Happy_eyeballs_miou_unix.kill daemon
   in
   Fun.protect ~finally @@ fun () ->
   match
