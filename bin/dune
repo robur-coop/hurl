@@ -7,7 +7,7 @@
   logs.threaded
   fmt.cli
   fmt.tty
-  mirage-crypto-rng-miou-unix
+  mirage-crypto-rng.unix
   hxd.core
   hxd.string
   multipart_form

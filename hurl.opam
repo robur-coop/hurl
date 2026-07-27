@@ -10,7 +10,7 @@ depends: [
   "ocaml" {>= "5.1.0"}
   "dune" {>= "2.8.0"}
   "httpcats" {>= "0.3.0"}
-  "mirage-crypto-rng-miou-unix"
+  "mirage-crypto-rng" {>= "1.2.0"}
   "hxd" {>= "0.3.4"}
   "multipart_form" {>= "0.6.0"}
   "cmdliner" {>= "1.3.0"}
