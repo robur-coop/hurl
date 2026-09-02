@@ -1,3 +1,8 @@
+### v0.0.1~beta3 (2026-09-02)
+
+- Use `Mirage_crypto_rng_unix` instead of `Mirage_crypto_rng_miou_unix` (@hannesm, #9)
+- Upgrade our test with `decompress.1.6.0` (@dinosaure, 67a9b3e)
+
 ### v0.0.1~beta2 (2026-05-06)
 
 - Use `-p` instead of `--printers` (@dinosaure, 1b864f1, d0c7aad)
