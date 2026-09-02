@@ -15,7 +15,7 @@ depends: [
   "multipart_form" {>= "0.6.0"}
   "cmdliner" {>= "1.3.0"}
   "jsonm"
-  "decompress" {>= "1.5.0"}
+  "decompress" {>= "1.6.0"}
   "bstr" {>= "0.0.2"}
 ]
 conflicts: [ "result" {< "1.5"} ]

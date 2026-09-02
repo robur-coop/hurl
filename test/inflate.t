@@ -30,7 +30,7 @@
   Server: bin/%%VERSION%%
   Access-Control-Allow-Origin: *
   Access-Control-Allow-Credentials: true
-  Content-Length: 151
+  Content-Length: 136
   Connection: close
   Content-Encoding: deflate
   
